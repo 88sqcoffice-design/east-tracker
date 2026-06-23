@@ -22,9 +22,7 @@ export default async function handler(req, res) {
 
       // สร้าง token + เก็บเป็น session (เครื่องใหม่ login → เครื่องเก่าหลุด)
       const token = makeToken(user.username);
-      await supabase.from('settings').upsert({
-        key: `sess_${user.username.toLowerCase()}`, value: token,
-      });
+      await supabase.from('users').update({ session_token: token }).ilike('username', user.username);
 
       return json(res, {
         success: true,
@@ -65,7 +63,7 @@ export default async function handler(req, res) {
     if (action === 'logout') {
       const { username } = body;
       if (username) {
-        await supabase.from('settings').delete().eq('key', `sess_${String(username).toLowerCase()}`);
+        await supabase.from('users').update({ session_token: null }).ilike('username', username);
       }
       return json(res, { success: true });
     }
@@ -87,7 +85,7 @@ export default async function handler(req, res) {
       if (!user) return json(res, { success: false, message: 'ไม่พบชื่อผู้ใช้นี้' });
 
       await supabase.from('users').update({ password: hashPassword(newPassword) }).ilike('username', username);
-      await supabase.from('settings').delete().eq('key', `sess_${username.toLowerCase()}`);
+      await supabase.from('users').update({ session_token: null }).ilike('username', username);
       return json(res, { success: true, message: 'เปลี่ยนรหัสผ่านสำเร็จ' });
     }
 
