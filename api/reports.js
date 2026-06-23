@@ -32,6 +32,23 @@ function aggregateByUser(rows) {
   }));
 }
 
+// รวมจำนวนครั้ง + นาทีทุกคน แยกกิจกรรม (สำหรับการ์ดสรุปรวม)
+function computeTotals(rows) {
+  const totalCounts = { break: 0, smoking: 0, toilet: 0, eat: 0, assist: 0 };
+  const totalMinutes = { break: 0, smoking: 0, toilet: 0, eat: 0, assist: 0 };
+  rows.forEach(r => {
+    const t = r.display_type || ''; const m = parseFloat(r.minutes) || 0;
+    let k = null;
+    if (t.includes('พักเบรค')) k = 'break';
+    else if (t.includes('สูบบุหรี่')) k = 'smoking';
+    else if (t.includes('ห้องน้ำ')) k = 'toilet';
+    else if (t.includes('กินข้าว')) k = 'eat';
+    else if (t.includes('ช่วยงาน')) k = 'assist';
+    if (k) { totalCounts[k]++; totalMinutes[k] = Math.round((totalMinutes[k] + m) * 100) / 100; }
+  });
+  return { totalCounts, totalMinutes };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, { success: false, message: 'POST only' }, 405);
   const body = req.body || {};
@@ -44,7 +61,10 @@ export default async function handler(req, res) {
     if (body.action === 'daily') {
       const date = body.date || new Date().toISOString().slice(0, 10);
       const { data } = await supabase.from('logs').select('*').eq('log_date', date);
-      return json(res, { success: true, users: aggregateByUser(data || []), date });
+      const rows = data || [];
+      const users = aggregateByUser(rows);
+      const { totalCounts, totalMinutes } = computeTotals(rows);
+      return json(res, { success: true, users, date, userCount: users.length, totalCounts, totalMinutes });
     }
 
     // ---------- รายงานช่วงวัน ----------
@@ -52,7 +72,10 @@ export default async function handler(req, res) {
       const { dateFrom, dateTo } = body;
       const { data } = await supabase.from('logs').select('*')
         .gte('log_date', dateFrom).lte('log_date', dateTo);
-      return json(res, { success: true, users: aggregateByUser(data || []), dateFrom, dateTo });
+      const rows = data || [];
+      const users = aggregateByUser(rows);
+      const { totalCounts, totalMinutes } = computeTotals(rows);
+      return json(res, { success: true, users, dateFrom, dateTo, userCount: users.length, totalCounts, totalMinutes });
     }
 
     // ---------- รายละเอียดรายคน (รายวัน) ----------
