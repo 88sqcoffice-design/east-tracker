@@ -1358,7 +1358,12 @@ body.theme-cosmic{background:#fafaf3}
         </div>
         <div class="sec-title" style="margin-top:24px">ประวัติย้อนหลัง</div>
         <div class="card" style="padding:24px">
-          <div class="log-empty">🚧 อยู่ในระหว่างการพัฒนา</div>
+          <div class="log-list" id="historyList"><div class="log-empty">⏳ กำลังโหลด...</div></div>
+          <div id="historyPager" style="display:none;justify-content:space-between;align-items:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);gap:12px">
+            <button class="pager-btn" id="historyPrevBtn" onclick="historyPage(-1)">‹ ก่อนหน้า</button>
+            <span class="pager-info" id="historyPageInfo">หน้า 1</span>
+            <button class="pager-btn" id="historyNextBtn" onclick="historyPage(1)">ถัดไป ›</button>
+          </div>
         </div>
       </div><!-- /emp-sec-history -->
 
@@ -1948,6 +1953,7 @@ body.theme-cosmic{background:#fafaf3}
     logActivityBatch: { url: '/api/activity', build: function (a) { return { action: 'batch', token: a[2], queue: a[3] }; } },
     getQuotaUsage: { url: '/api/activity', build: function (a) { return { action: 'quota', token: a[1] }; } },
     getTodayLogs: { url: '/api/activity', build: function (a) { return { action: 'todayLogs', token: a[1] }; } },
+    getHistoryLogs: { url: '/api/activity', build: function (a) { return { action: 'historyLogs', token: a[1], page: a[2] }; } },
     getSummary: { url: '/api/activity', build: function (a) { return { action: 'summary', token: a[1] }; } },
     getRunningActivities: { url: '/api/activity', build: function (a) { return { action: 'running', token: a[1] }; } },
     pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localActs: a[2] }; } },
@@ -3624,6 +3630,62 @@ function doRegister(){
 // ===== DATA =====
 function reloadData(){ loadSummary(); loadLogs(); loadQuota(); }
 
+// ===== ประวัติย้อนหลัง (แบ่งหน้า 10 รายการ) =====
+var __historyPage = 1, __historyTotalPages = 1;
+function loadHistory(page){
+  if(!currentUser)return;
+  page = page || 1;
+  var list=document.getElementById('historyList');
+  if(list) list.innerHTML='<div class="log-empty">⏳ กำลังโหลด...</div>';
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res&&res.expired){handleExpired();return;}
+      if(!res||!res.success){ if(list) list.innerHTML='<div class="log-empty">⚠️ โหลดไม่สำเร็จ</div>'; return; }
+      __historyPage=res.page; __historyTotalPages=res.totalPages;
+      renderHistory(res.logs||[]);
+      var pager=document.getElementById('historyPager');
+      var info=document.getElementById('historyPageInfo');
+      if(res.totalPages>1){
+        if(pager) pager.style.display='flex';
+        if(info) info.textContent='หน้า '+res.page+' / '+res.totalPages+' (ทั้งหมด '+res.total+' รายการ)';
+        var pv=document.getElementById('historyPrevBtn'), nx=document.getElementById('historyNextBtn');
+        if(pv) pv.disabled=res.page<=1;
+        if(nx) nx.disabled=res.page>=res.totalPages;
+      }else{ if(pager) pager.style.display='none'; }
+    })
+    .withFailureHandler(function(){ if(list) list.innerHTML='<div class="log-empty">⚠️ โหลดประวัติไม่ได้</div>'; })
+    .getHistoryLogs(currentUser.username, currentUser.token, page);
+}
+function renderHistory(logs){
+  var list=document.getElementById('historyList');
+  if(!list)return;
+  if(!logs.length){ list.innerHTML='<div class="log-empty">ไม่มีประวัติย้อนหลัง</div>'; return; }
+  var html='';
+  for(var j=0;j<logs.length;j++){
+    var r=logs[j];
+    var typeText=String(r[4]);
+    var usedMin=parseFloat(r[7]); if(isNaN(usedMin))usedMin=0;
+    var lim=0;
+    if(typeText.indexOf('พักเบรค')!==-1)lim=120;
+    else if(typeText.indexOf('สูบบุหรี่')!==-1||typeText.indexOf('ห้องน้ำ')!==-1)lim=20;
+    else if(typeText.indexOf('กินข้าว')!==-1)lim=20;
+    var over=(lim>0 && usedMin>lim);
+    var mins=(r[7]!==''&&r[7]!=null)?'<span class="log-dur">⏳ '+r[7]+' นาที'+(over?' ⚠️':'')+'</span>':'';
+    var byWho=(r[8])?'<span class="log-by">⛔ หยุดโดย '+escapeHtml(String(r[8]))+'</span>':'';
+    html+='<div class="log-item'+(over?' over':'')+'">'
+      +'<span class="log-type">'+typeText+' <span style="font-size:11px;color:var(--text-faint);font-family:var(--mono)">'+r[0]+'</span></span>'+byWho
+      +'<span class="log-time">▶ '+r[5]+'</span><span class="log-time">◼ '+r[6]+'</span>'+mins+'</div>';
+  }
+  list.innerHTML=html;
+}
+function historyPage(delta){
+  var p=__historyPage+delta;
+  if(p<1||p>__historyTotalPages)return;
+  loadHistory(p);
+  var el=document.getElementById('historyList');
+  if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
 function loadLogs(){
   if(!currentUser)return;
   google.script.run
@@ -3983,7 +4045,7 @@ function empSwitch(sec){
     s.classList.toggle('active', s.id==='emp-sec-'+sec);
   });
   // โหลดประวัติใหม่เมื่อเข้าหน้าประวัติ
-  if(sec==='history'){ try{ if(typeof loadLogs==='function') loadLogs(); }catch(e){} }
+  if(sec==='history'){ try{ if(typeof loadLogs==='function') loadLogs(); if(typeof loadHistory==='function') loadHistory(1); }catch(e){} }
 }
 
 function saSwitch(sec){
