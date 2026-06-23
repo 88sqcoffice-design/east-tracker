@@ -3166,6 +3166,7 @@ function setStopBtnLoading(type, on){
 
 // บันทึกเสร็จ → ลบ running + ปิด popup + reset ปุ่ม + อัปเดตในเครื่อง
 function finishStopUI(type, minutes){
+  __savingStop[type]=false;  // ล้าง flag (เผื่อมาจาก force stop path ที่ไม่ผ่าน handler)
   delete running[type]; saveRunning();
   var st=document.getElementById('start-'+type);
   if(st){ st.style.display=''; st.disabled=false; st.innerHTML='▶ เริ่ม'; }
@@ -3281,6 +3282,12 @@ function openTimerPopup(type,startStr){
   applyPopupImage(type);
   document.getElementById('timerName').textContent=META[type].name;
   document.getElementById('timerStarted').textContent='เริ่มเมื่อ '+startStr;
+  // รีเซ็ตปุ่มหยุดในป็อปอัปทุกครั้งที่เปิด (กันค้าง "กำลังดำเนินการ" จากกิจกรรมก่อน)
+  var pBtn=document.getElementById('timerStopBtn');
+  if(pBtn){
+    if(__savingStop[type]){ pBtn.disabled=true; pBtn.innerHTML='⏳ กำลังดำเนินการ...'; pBtn.style.opacity='0.7'; pBtn.style.cursor='wait'; }
+    else{ pBtn.disabled=false; pBtn.innerHTML='หยุดกิจกรรม'; pBtn.style.opacity=''; pBtn.style.cursor=''; }
+  }
   document.getElementById('timerOv').className='timer-ov show';
   if(timerInterval)clearInterval(timerInterval);
   timerInterval=setInterval(tickTimer,1000); tickTimer();
