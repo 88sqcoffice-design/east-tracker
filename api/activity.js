@@ -104,18 +104,27 @@ export default async function handler(req, res) {
         .from('logs').select('*')
         .ilike('username', uname).eq('log_date', today)
         .order('created_at', { ascending: false });
-      // frontend อ่านเป็น array: [date, time, username, name, displayType, startStr, stopStr, minutes]
-      // (index 4=กิจกรรม, 5=เริ่ม, 6=หยุด, 7=นาที) — รูปแบบเดียวกับระบบเดิม
-      const logs = (data || []).map(r => [
-        r.log_date,            // [0]
-        r.stop_str || '',      // [1]
-        r.username,            // [2]
-        r.display_name || '',  // [3]
-        r.display_type || '',  // [4] กิจกรรม
-        r.start_str || '',     // [5] เริ่ม
-        r.stop_str || '',      // [6] หยุด
-        (r.minutes != null ? r.minutes : ''),  // [7] นาที
-      ]);
+      // ดึง force_stop_log วันนี้ของ user (เพื่อบอกว่ารายการไหนถูกใครหยุด)
+      const { data: fsl } = await supabase.from('force_stop_log').select('*')
+        .ilike('target_user', uname).eq('log_date', today);
+      const fslList = fsl || [];
+      // frontend อ่านเป็น array: [date, time, username, name, displayType, startStr, stopStr, minutes, stopperLabel]
+      // (index 4=กิจกรรม, 5=เริ่ม, 6=หยุด, 7=นาที, 8=คนหยุด)
+      const logs = (data || []).map(r => {
+        const m = fslList.find(f => f.display_type === r.display_type && f.stop_str === r.stop_str);
+        const stopperLabel = m ? `@${m.stopper_user} (${m.stopper_role || 'ผู้ดูแล'})` : '';
+        return [
+          r.log_date,            // [0]
+          r.stop_str || '',      // [1]
+          r.username,            // [2]
+          r.display_name || '',  // [3]
+          r.display_type || '',  // [4] กิจกรรม
+          r.start_str || '',     // [5] เริ่ม
+          r.stop_str || '',      // [6] หยุด
+          (r.minutes != null ? r.minutes : ''),  // [7] นาที
+          stopperLabel,          // [8] คนหยุด (ถ้าถูก force stop)
+        ];
+      });
       return json(res, { success: true, logs });
     }
 
@@ -151,6 +160,33 @@ export default async function handler(req, res) {
         else if (t.includes('ช่วยงาน')) counts.assist++;
       });
       return json(res, { success: true, counts });
+    }
+
+    // ---------- ตรวจสถานะ (polling 30 วิ): กิจกรรมที่ทำอยู่ถูก admin หยุดให้ไหม ----------
+    if (body.action === 'pollStatus') {
+      const { localTypes } = body;  // กิจกรรมที่ frontend กำลังทำอยู่ เช่น ['smoking','break']
+      const today = new Date().toISOString().slice(0, 10);
+      const forcedStops = [];
+      if (localTypes && localTypes.length) {
+        const { data: run } = await supabase.from('running').select('activity_type').ilike('username', uname);
+        const runningTypes = (run || []).map(r => r.activity_type);
+        const { data: fsl } = await supabase.from('force_stop_log').select('*')
+          .ilike('target_user', uname).eq('log_date', today)
+          .order('created_at', { ascending: false });
+        const fslList = fsl || [];
+        for (const type of localTypes) {
+          if (runningTypes.includes(type)) continue;  // ยังทำอยู่ ไม่ถูกหยุด
+          const displayType = TYPE_MAP[type] || type;
+          const m = fslList.find(f => f.display_type === displayType);
+          if (m) {
+            forcedStops.push({
+              activityType: displayType, stopperUser: m.stopper_user,
+              roleLabel: m.stopper_role || 'ผู้ดูแล', stopTime: m.stop_str, minutes: m.minutes,
+            });
+          }
+        }
+      }
+      return json(res, { success: true, forcedStops });
     }
 
     // ---------- บันทึกแบบ batch (offline sync) ----------
