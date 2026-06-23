@@ -4033,7 +4033,12 @@ function renderStaffList(list){
   if(!box) return;
   if(!list.length){ box.innerHTML='<div class="log-empty">ไม่มีข้อมูลผู้ใช้</div>'; return; }
   var order={'superadmin':0,'admin':1,'monitor':2,'':3};
-  list.sort(function(a,b){ return (order[a.role]||3)-(order[b.role]||3); });
+  list.sort(function(a,b){
+    var ra=(order[a.role]!=null)?order[a.role]:3;
+    var rb=(order[b.role]!=null)?order[b.role]:3;
+    if(ra!==rb) return ra-rb;
+    return (a.username||'').toLowerCase().localeCompare((b.username||'').toLowerCase());
+  });
   __staffFiltered = list;
   // คำนวณหน้า
   var totalPages = Math.ceil(list.length / __STAFF_PER_PAGE);
