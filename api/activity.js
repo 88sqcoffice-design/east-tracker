@@ -104,12 +104,18 @@ export default async function handler(req, res) {
         .from('logs').select('*')
         .ilike('username', uname).eq('log_date', today)
         .order('created_at', { ascending: false });
-      // แปลง field ให้ตรงกับที่ frontend ใช้ (type/displayType/startStr/stopStr)
-      const logs = (data || []).map(r => ({
-        type: r.activity_type, displayType: r.display_type,
-        startStr: r.start_str || '', stopStr: r.stop_str || '',
-        minutes: r.minutes,
-      }));
+      // frontend อ่านเป็น array: [date, time, username, name, displayType, startStr, stopStr, minutes]
+      // (index 4=กิจกรรม, 5=เริ่ม, 6=หยุด, 7=นาที) — รูปแบบเดียวกับระบบเดิม
+      const logs = (data || []).map(r => [
+        r.log_date,            // [0]
+        r.stop_str || '',      // [1]
+        r.username,            // [2]
+        r.display_name || '',  // [3]
+        r.display_type || '',  // [4] กิจกรรม
+        r.start_str || '',     // [5] เริ่ม
+        r.stop_str || '',      // [6] หยุด
+        (r.minutes != null ? r.minutes : ''),  // [7] นาที
+      ]);
       return json(res, { success: true, logs });
     }
 
