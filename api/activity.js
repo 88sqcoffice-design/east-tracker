@@ -44,11 +44,14 @@ export default async function handler(req, res) {
     // ---------- เริ่มกิจกรรม ----------
     if (body.action === 'start') {
       const { activityType, startStr } = body;
-      // insert running — ถ้าซ้ำ (unique constraint) → upsert
-      await supabase.from('running').upsert({
+      // ลบ running เก่าก่อน แล้ว insert ใหม่ (ใช้ delete+insert แทน upsert
+      // เพราะ unique index เป็น functional lower(username) — onConflict ระบุไม่ได้)
+      await supabase.from('running').delete().ilike('username', uname).eq('activity_type', activityType);
+      const { error: insErr } = await supabase.from('running').insert({
         username: uname, display_name: dname, activity_type: activityType,
         start_ms: Date.now(), start_str: startStr,
-      }, { onConflict: 'username,activity_type' });
+      });
+      if (insErr) return json(res, { success: false, message: insErr.message });
 
       await logAction(uname, user.role, 'เริ่มกิจกรรม', `${dname} เริ่ม "${TYPE_MAP[activityType] || activityType}"`);
       return json(res, { success: true });
