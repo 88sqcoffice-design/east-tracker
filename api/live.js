@@ -3,7 +3,7 @@
 // เรียก: POST /api/live  body: { action, token, ... }
 // (Admin/Monitor เท่านั้น)
 // ============================================================
-import { supabase, QUOTA, TYPE_MAP, getUserByToken, isAdminOrMonitor, isAdminLevel, logAction, json } from './_lib/supabase.js';
+import { supabase, QUOTA, TYPE_MAP, getUserByToken, isAdminOrMonitor, isAdminLevel, logAction, json, thaiTimeStr } from './_lib/supabase.js';
 
 const LIMIT_MAP = { break: QUOTA.break, smoking: QUOTA.smoking, toilet: QUOTA.toilet, eat: QUOTA.eat };
 const ROLE_LABEL = { superadmin:'ผู้ดูแลสูงสุด', admin:'ผู้ดูแล', monitor:'ผู้ตรวจสอบ', employee:'พนักงาน' };
@@ -56,7 +56,7 @@ export default async function handler(req, res) {
 
       // บันทึก log
       const today = new Date().toISOString().slice(0, 10);
-      const stopStr = new Date().toTimeString().slice(0, 8);
+      const stopStr = thaiTimeStr();
       await supabase.from('logs').insert({
         username: targetUsername, display_name: targetDisplayName,
         activity_type: activityType, display_type: displayType,
