@@ -1358,6 +1358,18 @@ body.theme-cosmic{background:#fafaf3}
         </div>
         <div class="sec-title" style="margin-top:24px">ประวัติย้อนหลัง</div>
         <div class="card" style="padding:24px">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+            <div style="flex:1;min-width:130px">
+              <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:5px">จากวันที่</label>
+              <input type="date" id="histFromDate" style="width:100%;padding:9px 12px;background:rgba(8,12,24,.65);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
+            </div>
+            <div style="flex:1;min-width:130px">
+              <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:5px">ถึงวันที่</label>
+              <input type="date" id="histToDate" style="width:100%;padding:9px 12px;background:rgba(8,12,24,.65);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
+            </div>
+            <button class="btn-p" style="padding:9px 16px;font-size:13px" onclick="loadHistory(1)">🔍 ค้นหา</button>
+            <button class="btn-s" style="margin:0;padding:9px 14px;font-size:13px" onclick="clearHistFilter()">ล้าง</button>
+          </div>
           <div class="log-list" id="historyList"><div class="log-empty">⏳ กำลังโหลด...</div></div>
           <div id="historyPager" style="display:none;justify-content:space-between;align-items:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);gap:12px">
             <button class="pager-btn" id="historyPrevBtn" onclick="historyPage(-1)">‹ ก่อนหน้า</button>
@@ -1953,7 +1965,7 @@ body.theme-cosmic{background:#fafaf3}
     logActivityBatch: { url: '/api/activity', build: function (a) { return { action: 'batch', token: a[2], queue: a[3] }; } },
     getQuotaUsage: { url: '/api/activity', build: function (a) { return { action: 'quota', token: a[1] }; } },
     getTodayLogs: { url: '/api/activity', build: function (a) { return { action: 'todayLogs', token: a[1] }; } },
-    getHistoryLogs: { url: '/api/activity', build: function (a) { return { action: 'historyLogs', token: a[1], page: a[2] }; } },
+    getHistoryLogs: { url: '/api/activity', build: function (a) { return { action: 'historyLogs', token: a[1], page: a[2], dateFrom: a[3], dateTo: a[4] }; } },
     getSummary: { url: '/api/activity', build: function (a) { return { action: 'summary', token: a[1] }; } },
     getRunningActivities: { url: '/api/activity', build: function (a) { return { action: 'running', token: a[1] }; } },
     pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localActs: a[2] }; } },
@@ -3635,6 +3647,8 @@ var __historyPage = 1, __historyTotalPages = 1;
 function loadHistory(page){
   if(!currentUser)return;
   page = page || 1;
+  var fromEl=document.getElementById('histFromDate'), toEl=document.getElementById('histToDate');
+  var df=(fromEl&&fromEl.value)?fromEl.value:'', dt=(toEl&&toEl.value)?toEl.value:'';
   var list=document.getElementById('historyList');
   if(list) list.innerHTML='<div class="log-empty">⏳ กำลังโหลด...</div>';
   google.script.run
@@ -3654,7 +3668,7 @@ function loadHistory(page){
       }else{ if(pager) pager.style.display='none'; }
     })
     .withFailureHandler(function(){ if(list) list.innerHTML='<div class="log-empty">⚠️ โหลดประวัติไม่ได้</div>'; })
-    .getHistoryLogs(currentUser.username, currentUser.token, page);
+    .getHistoryLogs(currentUser.username, currentUser.token, page, df, dt);
 }
 function renderHistory(logs){
   var list=document.getElementById('historyList');
@@ -3684,6 +3698,11 @@ function historyPage(delta){
   loadHistory(p);
   var el=document.getElementById('historyList');
   if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function clearHistFilter(){
+  var f=document.getElementById('histFromDate'), t=document.getElementById('histToDate');
+  if(f) f.value=''; if(t) t.value='';
+  loadHistory(1);
 }
 
 function loadLogs(){
