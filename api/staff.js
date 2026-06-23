@@ -2,7 +2,7 @@
 // api/staff.js — จัดการพนักงาน (superadmin เท่านั้น)
 // เรียก: POST /api/staff  body: { action, token, ... }
 // ============================================================
-import { supabase, TYPE_MAP, getUserByToken, isSuperAdmin, hashPassword, logAction, json } from './_lib/supabase.js';
+import { supabase, TYPE_MAP, getUserByToken, isSuperAdmin, hashPassword, logAction, json, thaiTimeStr } from './_lib/supabase.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, { success: false, message: 'POST only' }, 405);
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
       // 1.5) โหมดนาที: ใส่รายการใหม่ตามนาทีที่ตั้ง
       let addedEntries = 0;
       if (minutesMap) {
-        const nowStr = new Date().toTimeString().slice(0, 8);
+        const nowStr = thaiTimeStr();
         const rows = [];
         for (const act of selectedActs) {
           const mins = parseFloat(minutesMap[act]);
