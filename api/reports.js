@@ -1,0 +1,108 @@
+// ============================================================
+// api/reports.js — รายงานรายวัน/ช่วงวัน + รายละเอียดรายคน + ลบรายการ
+// เรียก: POST /api/reports  body: { action, token, ... }
+// ============================================================
+import { supabase, QUOTA, getUserByToken, isAdminLevel, logAction, json } from './_lib/supabase.js';
+
+// รวมข้อมูลเป็นรายคน (โควต้า + จำนวนครั้ง)
+function aggregateByUser(rows) {
+  const map = {};
+  rows.forEach(r => {
+    const u = (r.username || '').toLowerCase();
+    if (!map[u]) {
+      map[u] = {
+        username: r.username, displayName: r.display_name || r.username,
+        sharedUsed: 0, breakUsed: 0,
+        cntBreak: 0, cntSmoke: 0, cntToilet: 0, cntEat: 0, cntAssist: 0,
+      };
+    }
+    const t = r.display_type || '';
+    const m = parseFloat(r.minutes) || 0;
+    if (t.includes('พักเบรค')) { map[u].breakUsed += m; map[u].cntBreak++; }
+    else if (t.includes('สูบบุหรี่')) { map[u].sharedUsed += m; map[u].cntSmoke++; }
+    else if (t.includes('ห้องน้ำ')) { map[u].sharedUsed += m; map[u].cntToilet++; }
+    else if (t.includes('กินข้าว')) { map[u].sharedUsed += m; map[u].cntEat++; }
+    else if (t.includes('ช่วยงาน')) { map[u].cntAssist++; }
+  });
+  return Object.values(map).map(u => ({
+    ...u,
+    sharedUsed: Math.round(u.sharedUsed * 100) / 100,
+    breakUsed: Math.round(u.breakUsed * 100) / 100,
+    sharedQuota: QUOTA.shared, breakQuota: QUOTA.break,
+  }));
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return json(res, { success: false, message: 'POST only' }, 405);
+  const body = req.body || {};
+  const user = await getUserByToken(body.token);
+  if (!user) return json(res, { success: false, expired: true });
+  if (!isAdminLevel(user)) return json(res, { success: false, message: 'เฉพาะผู้ดูแลระบบ' });
+
+  try {
+    // ---------- รายงานรายวัน ----------
+    if (body.action === 'daily') {
+      const date = body.date || new Date().toISOString().slice(0, 10);
+      const { data } = await supabase.from('logs').select('*').eq('log_date', date);
+      return json(res, { success: true, users: aggregateByUser(data || []), date });
+    }
+
+    // ---------- รายงานช่วงวัน ----------
+    if (body.action === 'range') {
+      const { dateFrom, dateTo } = body;
+      const { data } = await supabase.from('logs').select('*')
+        .gte('log_date', dateFrom).lte('log_date', dateTo);
+      return json(res, { success: true, users: aggregateByUser(data || []), dateFrom, dateTo });
+    }
+
+    // ---------- รายละเอียดรายคน (รายวัน) ----------
+    if (body.action === 'userDetail') {
+      const { targetUsername, date } = body;
+      const d = date || new Date().toISOString().slice(0, 10);
+      const { data } = await supabase.from('logs').select('*')
+        .ilike('username', targetUsername).eq('log_date', d)
+        .order('created_at', { ascending: true });
+      const entries = (data || []).map(r => ({
+        id: r.id,                              // ใช้ลบแม่นยำ (แทน rowIndex)
+        date: d, displayType: r.display_type,
+        startStr: r.start_str || '', stopStr: r.stop_str || '',
+        minutes: r.minutes,
+      }));
+      return json(res, { success: true, entries });
+    }
+
+    // ---------- ลบรายการ (ใช้ id — แม่นยำ ไม่มีบั๊ก match) ----------
+    if (body.action === 'deleteEntry') {
+      const { entryId } = body;
+      if (!entryId) return json(res, { success: false, message: 'ไม่มี id' });
+
+      // ดึงข้อมูลก่อนลบ (เพื่อ log + คืนโควต้า)
+      const { data: row } = await supabase.from('logs').select('*').eq('id', entryId).single();
+      if (!row) return json(res, { success: false, message: 'ไม่พบรายการ (อาจถูกลบแล้ว)' });
+
+      await supabase.from('logs').delete().eq('id', entryId);
+      await logAction(user.username, user.role, 'ลบประวัติ',
+        `ลบรายการ "${row.display_type}" ของ @${row.username} (${row.minutes} นาที)`);
+
+      // คืนโควต้า — คำนวณใหม่
+      const today = new Date().toISOString().slice(0, 10);
+      let quota = null;
+      if (row.log_date === today) {
+        const { data: logs } = await supabase.from('logs').select('display_type, minutes')
+          .ilike('username', row.username).eq('log_date', today);
+        let shared = 0, brk = 0;
+        (logs || []).forEach(r => {
+          const t = r.display_type || ''; const m = parseFloat(r.minutes) || 0;
+          if (t.includes('พักเบรค')) brk += m;
+          else if (t.includes('สูบบุหรี่') || t.includes('ห้องน้ำ') || t.includes('กินข้าว')) shared += m;
+        });
+        quota = { sharedUsed: Math.round(shared*100)/100, breakUsed: Math.round(brk*100)/100 };
+      }
+      return json(res, { success: true, quota });
+    }
+
+    return json(res, { success: false, message: 'unknown action' });
+  } catch (e) {
+    return json(res, { success: false, message: 'เกิดข้อผิดพลาด: ' + e.message });
+  }
+}
