@@ -4881,7 +4881,9 @@ function deleteUserEntry(entryJson,btn){
         // แจ้งว่าลบแล้ว + เวลาคืนให้พนักงานแล้ว (โควต้าอัปเดตทันที)
         var qMsg=entry.displayType+' • คืนเวลา '+entry.minutes+' นาที';
         toast('🗑 ลบรายการแล้ว',qMsg);
-        __udDeleting=false;  // ปลดล็อกก่อน reload (loadUserDetail จะ render ปุ่มใหม่)
+        __udDeleting=false;
+        var cb=document.getElementById('udCloseBtn');
+        if(cb){ cb.disabled=false; cb.style.opacity=''; cb.style.cursor=''; cb.style.pointerEvents=''; }
         loadUserDetail();  // โหลดรายการใหม่
         loadAdminReport(); // อัปเดตสรุปด้วย
       }else if(res && res.expired){ restore(); handleExpired(); }
