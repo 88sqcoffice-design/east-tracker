@@ -33,6 +33,15 @@ function aggregateByUser(rows) {
 }
 
 // รวมจำนวนครั้ง + นาทีทุกคน แยกกิจกรรม (สำหรับการ์ดสรุปรวม)
+function toISODate(d) {
+  if (!d) return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  if (String(d).includes('/')) {
+    const [dd, mm, yyyy] = String(d).split('/');
+    return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  }
+  return d;
+}
+
 function computeTotals(rows) {
   const totalCounts = { break: 0, smoking: 0, toilet: 0, eat: 0, assist: 0 };
   const totalMinutes = { break: 0, smoking: 0, toilet: 0, eat: 0, assist: 0 };
@@ -59,7 +68,7 @@ export default async function handler(req, res) {
   try {
     // ---------- รายงานรายวัน ----------
     if (body.action === 'daily') {
-      const date = body.date || new Date().toISOString().slice(0, 10);
+      const date = toISODate(body.date);
       const { data } = await supabase.from('logs').select('*').eq('log_date', date);
       const rows = data || [];
       const users = aggregateByUser(rows);
@@ -69,7 +78,7 @@ export default async function handler(req, res) {
 
     // ---------- รายงานช่วงวัน ----------
     if (body.action === 'range') {
-      const { dateFrom, dateTo } = body;
+      const dateFrom = toISODate(body.dateFrom), dateTo = toISODate(body.dateTo);
       const { data } = await supabase.from('logs').select('*')
         .gte('log_date', dateFrom).lte('log_date', dateTo);
       const rows = data || [];
@@ -81,7 +90,7 @@ export default async function handler(req, res) {
     // ---------- รายละเอียดรายคน (รายวัน) ----------
     if (body.action === 'userDetail') {
       const { targetUsername, date } = body;
-      const d = date || new Date().toISOString().slice(0, 10);
+      const d = toISODate(date);
       const { data } = await supabase.from('logs').select('*')
         .ilike('username', targetUsername).eq('log_date', d)
         .order('created_at', { ascending: true });
