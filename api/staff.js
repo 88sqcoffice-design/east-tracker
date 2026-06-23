@@ -14,13 +14,19 @@ export default async function handler(req, res) {
   try {
     // ---------- รายชื่อพนักงาน ----------
     if (body.action === 'list') {
-      const { data } = await supabase.from('users').select('username, display_name, role, created_at')
-        .order('created_at', { ascending: false });
+      const { data } = await supabase.from('users').select('username, display_name, role, created_at');
+      // เรียง: สิทธิ์สูง→ต่ำ (superadmin>admin>monitor>employee) แล้วตามตัวอักษร username
+      const roleRank = { superadmin: 0, admin: 1, monitor: 2, employee: 3 };
       const staff = (data || []).map(u => ({
         username: u.username, displayName: u.display_name,
         role: u.role || 'employee', createdAt: u.created_at,
         isMainAdmin: u.username.toLowerCase() === 'admin',
-      }));
+      })).sort((a, b) => {
+        const ra = roleRank[a.role] != null ? roleRank[a.role] : 3;
+        const rb = roleRank[b.role] != null ? roleRank[b.role] : 3;
+        if (ra !== rb) return ra - rb;                          // สิทธิ์สูงก่อน
+        return a.username.toLowerCase().localeCompare(b.username.toLowerCase());  // ตามตัวอักษร
+      });
       return json(res, { success: true, staff });
     }
 
