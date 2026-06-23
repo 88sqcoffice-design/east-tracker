@@ -47,12 +47,10 @@ export function makeToken(username) {
 // ---------- ตรวจสิทธิ์ ----------
 export async function getUserByToken(token) {
   if (!token) return null;
-  const username = String(token).split('-')[0];  // username อยู่หน้าสุด (username ไม่มี -)
+  const username = String(token).split('-')[0];
   const { data } = await supabase.from('users').select('*').ilike('username', username).single();
   if (!data) return null;
-  // ตรวจ token ตรงกับที่เก็บใน settings (session)
-  const { data: sess } = await supabase.from('settings').select('value').eq('key', `sess_${username.toLowerCase()}`).single();
-  if (!sess || sess.value !== token) return null;
+  if (data.session_token !== token) return null;
   return data;
 }
 
