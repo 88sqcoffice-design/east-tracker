@@ -11,7 +11,7 @@ async function getSetting(key, def = '') {
   return data ? data.value : def;
 }
 async function setSetting(key, value) {
-  await supabase.from('settings').upsert({ key, value: String(value), updated_at: new Date().toISOString() });
+  await supabase.from('settings').upsert({ key, value: String(value) });
 }
 
 export default async function handler(req, res) {
