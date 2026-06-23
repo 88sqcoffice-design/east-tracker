@@ -43,6 +43,36 @@ export default async function handler(req, res) {
       return json(res, { success: true });
     }
 
+    // ---------- แก้ไขชื่อ (display_name) ----------
+    if (body.action === 'updateName') {
+      const { targetUsername, newName } = body;
+      const nm = String(newName || '').trim();
+      if (!nm) return json(res, { success: false, message: 'กรุณากรอกชื่อ' });
+      if (nm.length > 60) return json(res, { success: false, message: 'ชื่อยาวเกินไป (สูงสุด 60 ตัว)' });
+      const { error } = await supabase.from('users').update({ display_name: nm }).ilike('username', targetUsername);
+      if (error) return json(res, { success: false, message: error.message });
+      await logAction(user.username, user.role, 'แก้ไขชื่อ', `เปลี่ยนชื่อ @${targetUsername} → ${nm}`);
+      return json(res, { success: true, newName: nm });
+    }
+
+    // ---------- เปลี่ยนสิทธิ์หลายคนพร้อมกัน (bulk) ----------
+    if (body.action === 'bulkRole') {
+      const { usernames, role } = body;  // usernames = array
+      if (!Array.isArray(usernames) || !usernames.length) return json(res, { success: false, message: 'ไม่ได้เลือกผู้ใช้' });
+      let r = String(role || '').toLowerCase().trim();
+      if (!['monitor', 'admin', 'superadmin'].includes(r)) r = 'employee';
+      // กันแก้ admin หลัก
+      const targets = usernames.filter(u => String(u).toLowerCase() !== 'admin');
+      let ok = 0;
+      for (const u of targets) {
+        const { error } = await supabase.from('users').update({ role: r }).ilike('username', u);
+        if (!error) ok++;
+      }
+      const label = { superadmin:'ผู้ดูแลสูงสุด', admin:'ผู้ดูแล', monitor:'ผู้ตรวจสอบ', employee:'พนักงาน' }[r];
+      await logAction(user.username, user.role, 'เปลี่ยนสิทธิ์หลายคน', `ตั้ง ${ok} คนเป็น ${label}`);
+      return json(res, { success: true, updated: ok });
+    }
+
     // ---------- ลบบัญชี ----------
     if (body.action === 'deleteUser') {
       const { targetUsername } = body;
