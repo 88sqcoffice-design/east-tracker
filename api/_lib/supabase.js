@@ -27,6 +27,11 @@ export const ROLE_LABEL = {
   monitor: 'ผู้ตรวจสอบ', employee: 'พนักงาน',
 };
 
+// ---------- เวลาไทย HH:mm:ss (Vercel รันที่ UTC จึงบวก +7 ชม.เอง) ----------
+export function thaiTimeStr() {
+  return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(11, 19);
+}
+
 // ---------- hash password (SHA-256 เหมือนระบบเดิม) ----------
 export function hashPassword(pw) {
   return crypto.createHash('sha256').update(String(pw), 'utf8').digest('hex');
