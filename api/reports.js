@@ -96,12 +96,19 @@ export default async function handler(req, res) {
       const { data } = await supabase.from('logs').select('*')
         .ilike('username', targetUsername).eq('log_date', d)
         .order('id', { ascending: false });  // ใหม่→เก่า ด้วย id (แม่นกว่า created_at)
-      const entries = (data || []).map(r => ({
-        id: r.id,                              // ใช้ลบแม่นยำ (แทน rowIndex)
-        date: d, displayType: r.display_type,
-        startStr: r.start_str || '', stopStr: r.stop_str || '',
-        minutes: r.minutes,
-      }));
+      // ดึงประวัติการกดหยุดของ user+วันนี้ เพื่อหาว่าใครเป็นคนหยุด
+      const { data: fsl } = await supabase.from('force_stop_log').select('*')
+        .ilike('target_user', targetUsername).eq('log_date', d);
+      const fslList = fsl || [];
+      const entries = (data || []).map(r => {
+        const m = fslList.find(f => f.display_type === r.display_type && f.stop_str === r.stop_str);
+        const stopperLabel = m ? ('@' + m.stopper_user + ' (' + (m.stopper_role || '') + ')') : '';
+        return {
+          id: r.id, date: d, displayType: r.display_type,
+          startStr: r.start_str || '', stopStr: r.stop_str || '',
+          minutes: r.minutes, stopperLabel: stopperLabel,
+        };
+      });
       return json(res, { success: true, entries });
     }
 
