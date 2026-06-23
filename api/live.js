@@ -45,7 +45,6 @@ export default async function handler(req, res) {
     if (body.action === 'forceStop') {
       const { targetUsername, targetDisplayName, activityType, startStr, startMs } = body;
       const displayType = TYPE_MAP[activityType] || activityType;
-      const stopIso = new Date().toISOString();
       const minutes = startMs ? Math.round(((Date.now() - parseInt(startMs)) / 60000) * 100) / 100 : null;
 
       // ลบ running (atomic) — ถ้าไม่มี = ถูกหยุดไปแล้ว
@@ -63,11 +62,11 @@ export default async function handler(req, res) {
         activity_type: activityType, display_type: displayType,
         start_str: startStr || '', stop_str: stopStr, minutes, log_date: today,
       });
-      // บันทึก force_stop_log
+      // บันทึก force_stop_log — ใช้ stop_str เป็น HH:mm:ss ให้ตรงกับ logs (เพื่อ match ในประวัติ)
       await supabase.from('force_stop_log').insert({
         stopper_user: user.username, stopper_role: ROLE_LABEL[user.role] || user.role,
         target_user: targetUsername, target_name: targetDisplayName,
-        display_type: displayType, start_str: startStr, stop_str: stopIso, minutes, log_date: today,
+        display_type: displayType, start_str: startStr, stop_str: stopStr, minutes, log_date: today,
       });
 
       await logAction(user.username, user.role, 'กดหยุดให้',
