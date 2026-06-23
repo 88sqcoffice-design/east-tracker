@@ -3615,7 +3615,7 @@ function loadLogs(){
         }
       }
       if(res&&res.success&&res.logs&&res.logs.length>0){
-        for(var j=res.logs.length-1;j>=0;j--){
+        for(var j=0;j<res.logs.length;j++){  // backend เรียงใหม่→เก่าแล้ว วน 0→ท้าย = ล่าสุดขึ้นบน
           var r=res.logs[j];
           var typeText=String(r[4]);
           var usedMin=parseFloat(r[7]); if(isNaN(usedMin))usedMin=0;
