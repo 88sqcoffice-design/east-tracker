@@ -12,24 +12,26 @@ function aggregateByUser(rows) {
     if (!map[u]) {
       map[u] = {
         username: r.username, displayName: r.display_name || r.username,
-        sharedUsed: 0, breakUsed: 0,
-        cntBreak: 0, cntSmoke: 0, cntToilet: 0, cntEat: 0, cntAssist: 0,
+        counts: { break: 0, smoking: 0, toilet: 0, eat: 0, assist: 0 },
+        minutes: { break: 0, smoking: 0, toilet: 0, eat: 0, assist: 0 },
       };
     }
     const t = r.display_type || '';
     const m = parseFloat(r.minutes) || 0;
-    if (t.includes('พักเบรค')) { map[u].breakUsed += m; map[u].cntBreak++; }
-    else if (t.includes('สูบบุหรี่')) { map[u].sharedUsed += m; map[u].cntSmoke++; }
-    else if (t.includes('ห้องน้ำ')) { map[u].sharedUsed += m; map[u].cntToilet++; }
-    else if (t.includes('กินข้าว')) { map[u].sharedUsed += m; map[u].cntEat++; }
-    else if (t.includes('ช่วยงาน')) { map[u].cntAssist++; }
+    let k = null;
+    if (t.includes('พักเบรค')) k = 'break';
+    else if (t.includes('สูบบุหรี่')) k = 'smoking';
+    else if (t.includes('ห้องน้ำ')) k = 'toilet';
+    else if (t.includes('กินข้าว')) k = 'eat';
+    else if (t.includes('ช่วยงาน')) k = 'assist';
+    if (k) { map[u].counts[k]++; map[u].minutes[k] = Math.round((map[u].minutes[k] + m) * 100) / 100; }
   });
-  return Object.values(map).map(u => ({
-    ...u,
-    sharedUsed: Math.round(u.sharedUsed * 100) / 100,
-    breakUsed: Math.round(u.breakUsed * 100) / 100,
-    sharedQuota: QUOTA.shared, breakQuota: QUOTA.break,
-  }));
+  return Object.values(map).map(u => {
+    const c = u.counts, mn = u.minutes;
+    const totalCount = c.break + c.smoking + c.toilet + c.eat + c.assist;
+    const totalMinutes = Math.round((mn.break + mn.smoking + mn.toilet + mn.eat + mn.assist) * 100) / 100;
+    return { ...u, totalCount, totalMinutes };
+  });
 }
 
 // รวมจำนวนครั้ง + นาทีทุกคน แยกกิจกรรม (สำหรับการ์ดสรุปรวม)
