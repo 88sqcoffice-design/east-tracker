@@ -86,7 +86,21 @@ export default async function handler(req, res) {
       const rows = data || [];
       const users = aggregateByUser(rows);
       const { totalCounts, totalMinutes } = computeTotals(rows);
-      return json(res, { success: true, users, dateFrom, dateTo, userCount: users.length, totalCounts, totalMinutes });
+      // จัดกลุ่มรายวันสำหรับกราฟเส้น
+      const dayMap = {};
+      rows.forEach(r => {
+        const d = r.log_date;
+        if (!dayMap[d]) dayMap[d] = { break: 0, smoking: 0, toilet: 0, eat: 0, assist: 0 };
+        const t = r.display_type || '';
+        if (t.includes('พักเบรค')) dayMap[d].break++;
+        else if (t.includes('สูบบุหรี่')) dayMap[d].smoking++;
+        else if (t.includes('ห้องน้ำ')) dayMap[d].toilet++;
+        else if (t.includes('กินข้าว')) dayMap[d].eat++;
+        else if (t.includes('ช่วยงาน')) dayMap[d].assist++;
+      });
+      const toDMY = (iso) => { const p = String(iso).split('-'); return p[2] + '/' + p[1] + '/' + p[0]; };
+      const days = Object.keys(dayMap).sort().map(d => ({ date: toDMY(d), counts: dayMap[d] }));
+      return json(res, { success: true, users, dateFrom, dateTo, from: body.dateFrom, to: body.dateTo, userCount: users.length, totalCounts, totalMinutes, days });
     }
 
     // ---------- รายละเอียดรายคน (รายวัน) ----------
