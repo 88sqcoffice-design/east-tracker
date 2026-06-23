@@ -1923,7 +1923,7 @@ body.theme-cosmic{background:#fafaf3}
     getTodayLogs: { url: '/api/activity', build: function (a) { return { action: 'todayLogs', token: a[1] }; } },
     getSummary: { url: '/api/activity', build: function (a) { return { action: 'summary', token: a[1] }; } },
     getRunningActivities: { url: '/api/activity', build: function (a) { return { action: 'running', token: a[1] }; } },
-    pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localTypes: a[2] }; } },
+    pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localActs: a[2] }; } },
 
     // ===== REPORTS =====
     getAdminDailyReport: { url: '/api/reports', build: function (a) { return { action: 'daily', token: a[1], date: a[2] }; } },
@@ -2900,8 +2900,9 @@ setInterval(pingServer, 10000);
 // ===== POLLING: ตรวจว่ากิจกรรมที่ทำอยู่ถูก admin หยุดให้ไหม (ทุก 30 วิ) =====
 function pollForcedStop(){
   if(!isOnline || !currentUser) return;
-  var localTypes = Object.keys(running);
-  if(localTypes.length === 0) return;  // ไม่มีกิจกรรมทำอยู่ → ไม่ต้องเช็ค
+  var localActs = [];
+  for(var t in running){ if(running.hasOwnProperty(t)) localActs.push({type:t, startMs:running[t].startMs}); }
+  if(localActs.length === 0) return;  // ไม่มีกิจกรรมทำอยู่ → ไม่ต้องเช็ค
   google.script.run
     .withSuccessHandler(function(res){
       if(res && res.forcedStops && res.forcedStops.length){
@@ -2918,7 +2919,7 @@ function pollForcedStop(){
       }
     })
     .withFailureHandler(function(){})
-    .pollStatus(currentUser.username, currentUser.token, localTypes);
+    .pollStatus(currentUser.username, currentUser.token, localActs);
 }
 setInterval(pollForcedStop, 30000);  // ทุก 30 วินาที
 
@@ -3058,13 +3059,18 @@ function startActivity(type){
   if(!currentUser){toast('⚠️ กรุณาเข้าสู่ระบบก่อน','','err');return;}
   if(!META[type]) buildMeta();  // กันพลาด: ถ้า META ว่าง build ใหม่ก่อนใช้
   if(running[type]){toast('⚠️ กิจกรรมนี้กำลังทำงานอยู่','','err');return;}
+  // ปิด popup "ถูกหยุดให้แล้ว" ถ้าค้างอยู่ (เผื่อเพิ่งถูก admin หยุด แล้วกดเริ่มใหม่)
+  var fsBg=document.getElementById('fsModalBg'); if(fsBg) fsBg.remove();
+  var fsWrap=document.getElementById('fsModalWrap'); if(fsWrap) fsWrap.remove();
   var now=new Date();
   var startStr=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2)+':'+('0'+now.getSeconds()).slice(-2);
   var qStartRemain = (GROUP[type]==='shared') ? quotaRemainSec('shared') : null;
   running[type]={startMs:now.getTime(), startStr:startStr, quotaStartRemainSec:qStartRemain, notifiedLimit:false, lastOverStep:0};
   saveRunning();
   document.getElementById('start-'+type).style.display='none';
-  document.getElementById('stop-'+type).style.display='';
+  var spBtn=document.getElementById('stop-'+type);
+  spBtn.style.display='';
+  spBtn.disabled=false; spBtn.innerHTML=spBtn.dataset.orig||'■ หยุด'; spBtn.style.opacity=''; spBtn.style.cursor='';
   document.getElementById('card-'+type).classList.add('running');
   openTimerPopup(type,startStr);
   toast('▶ เริ่ม '+META[type].name,'เวลา '+startStr);
