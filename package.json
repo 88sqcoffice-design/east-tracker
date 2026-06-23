@@ -1,0 +1,9 @@
+{
+  "name": "east-time-tracker",
+  "version": "2.0.0",
+  "description": "EAST TIME TRACKER - Supabase + Vercel",
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
