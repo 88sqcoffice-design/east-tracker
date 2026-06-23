@@ -1358,17 +1358,21 @@ body.theme-cosmic{background:#fafaf3}
         </div>
         <div class="sec-title" style="margin-top:24px">ประวัติย้อนหลัง</div>
         <div class="card" style="padding:24px">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
-            <div style="flex:1;min-width:130px">
-              <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:5px">จากวันที่</label>
-              <input type="date" id="histFromDate" style="width:100%;padding:9px 12px;background:rgba(8,12,24,.65);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
-            </div>
-            <div style="flex:1;min-width:130px">
-              <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:5px">ถึงวันที่</label>
-              <input type="date" id="histToDate" style="width:100%;padding:9px 12px;background:rgba(8,12,24,.65);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
-            </div>
-            <button class="btn-p" style="padding:9px 16px;font-size:13px" onclick="loadHistory(1)">🔍 ค้นหา</button>
-            <button class="btn-s" style="margin:0;padding:9px 14px;font-size:13px" onclick="clearHistFilter()">ล้าง</button>
+          <div class="tab-sw" style="max-width:300px;margin:0 auto 16px">
+            <button class="tab-btn active" id="histModeDayBtn" onclick="setHistMode('day')">รายวัน</button>
+            <button class="tab-btn" id="histModeRangeBtn" onclick="setHistMode('range')">ช่วงหลายวัน</button>
+          </div>
+          <div id="histDayControls" style="display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+            <input type="date" id="histDayDate" class="date-input">
+            <button class="btn-p" style="width:auto;padding:9px 20px;font-size:13px" onclick="loadHistory(1)">🔍 ดูประวัติ</button>
+            <button class="refresh-btn" style="padding:9px 16px" onclick="histSetToday()">วันนี้</button>
+          </div>
+          <div id="histRangeControls" style="display:none;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+            <input type="date" id="histFromDate" class="date-input">
+            <span style="font-size:12px;color:var(--text-dim)">ถึง</span>
+            <input type="date" id="histToDate" class="date-input">
+            <button class="btn-p" style="width:auto;padding:9px 20px;font-size:13px" onclick="loadHistory(1)">🔍 ดูประวัติ</button>
+            <button class="refresh-btn" style="padding:9px 16px" onclick="histSet7Days()">7 วัน</button>
           </div>
           <div class="log-list" id="historyList"><div class="log-empty">⏳ กำลังโหลด...</div></div>
           <div id="historyPager" style="display:none;justify-content:space-between;align-items:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);gap:12px">
@@ -3644,11 +3648,19 @@ function reloadData(){ loadSummary(); loadLogs(); loadQuota(); }
 
 // ===== ประวัติย้อนหลัง (แบ่งหน้า 10 รายการ) =====
 var __historyPage = 1, __historyTotalPages = 1;
+var __histMode='day';
 function loadHistory(page){
   if(!currentUser)return;
   page = page || 1;
-  var fromEl=document.getElementById('histFromDate'), toEl=document.getElementById('histToDate');
-  var df=(fromEl&&fromEl.value)?fromEl.value:'', dt=(toEl&&toEl.value)?toEl.value:'';
+  var df='', dt='';
+  if(__histMode==='day'){
+    var dd=document.getElementById('histDayDate');
+    if(dd&&dd.value){ df=dd.value; dt=dd.value; }
+  }else{
+    var fromEl=document.getElementById('histFromDate'), toEl=document.getElementById('histToDate');
+    df=(fromEl&&fromEl.value)?fromEl.value:'';
+    dt=(toEl&&toEl.value)?toEl.value:'';
+  }
   var list=document.getElementById('historyList');
   if(list) list.innerHTML='<div class="log-empty">⏳ กำลังโหลด...</div>';
   google.script.run
@@ -3699,9 +3711,35 @@ function historyPage(delta){
   var el=document.getElementById('historyList');
   if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-function clearHistFilter(){
+function setHistMode(mode){
+  __histMode=mode;
+  if(mode==='day'){
+    document.getElementById('histModeDayBtn').className='tab-btn active';
+    document.getElementById('histModeRangeBtn').className='tab-btn';
+    document.getElementById('histDayControls').style.display='flex';
+    document.getElementById('histRangeControls').style.display='none';
+    var dd=document.getElementById('histDayDate');
+    if(dd&&!dd.value) dd.value=new Date(Date.now()+7*60*60*1000).toISOString().slice(0,10);
+  }else{
+    document.getElementById('histModeRangeBtn').className='tab-btn active';
+    document.getElementById('histModeDayBtn').className='tab-btn';
+    document.getElementById('histRangeControls').style.display='flex';
+    document.getElementById('histDayControls').style.display='none';
+    if(!document.getElementById('histFromDate').value) histSet7Days();
+  }
+  loadHistory(1);
+}
+function histSetToday(){
+  var d=document.getElementById('histDayDate');
+  if(d) d.value=new Date(Date.now()+7*60*60*1000).toISOString().slice(0,10);
+  loadHistory(1);
+}
+function histSet7Days(){
+  var to=new Date(Date.now()+7*60*60*1000);
+  var from=new Date(to.getTime()-6*86400000);
   var f=document.getElementById('histFromDate'), t=document.getElementById('histToDate');
-  if(f) f.value=''; if(t) t.value='';
+  if(f) f.value=from.toISOString().slice(0,10);
+  if(t) t.value=to.toISOString().slice(0,10);
   loadHistory(1);
 }
 
@@ -4064,7 +4102,9 @@ function empSwitch(sec){
     s.classList.toggle('active', s.id==='emp-sec-'+sec);
   });
   // โหลดประวัติใหม่เมื่อเข้าหน้าประวัติ
-  if(sec==='history'){ try{ if(typeof loadLogs==='function') loadLogs(); if(typeof loadHistory==='function') loadHistory(1); }catch(e){} }
+  if(sec==='history'){ try{ if(typeof loadLogs==='function') loadLogs();
+    var hdd=document.getElementById('histDayDate'); if(hdd&&!hdd.value) hdd.value=new Date(Date.now()+7*60*60*1000).toISOString().slice(0,10);
+    if(typeof loadHistory==='function') loadHistory(1); }catch(e){} }
 }
 
 function saSwitch(sec){
@@ -5202,8 +5242,8 @@ function loadAdminRange(){
       if(res && res.expired){ handleExpired(); return; } if(res && res.kicked){ handleKicked(); return; }
       if(!res||!res.success){document.getElementById('adminUserList').innerHTML='<div class="log-empty">⚠️ '+((res&&res.message)||'โหลดไม่สำเร็จ')+'</div>';return;}
       lastReport=res; lastReportType='range';
-      document.getElementById('adminDate').textContent=res.from+' - '+res.to;
-      document.getElementById('adminSummaryTitle').textContent='สรุปรวมช่วง '+res.from+' ถึง '+res.to+' • '+res.userCount+' คน';
+      document.getElementById('adminDate').textContent=from+' - '+to;
+      document.getElementById('adminSummaryTitle').textContent='สรุปรวมช่วง '+from+' ถึง '+to+' • '+res.userCount+' คน';
       renderTotals(res); drawLine(res); renderUserList(res,'ไม่มีข้อมูลในช่วงนี้');
     })
     .withFailureHandler(function(e){document.getElementById('adminUserList').innerHTML='<div class="log-empty">⚠️ '+e.message+'</div>';})
