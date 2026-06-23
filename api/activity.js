@@ -133,13 +133,20 @@ export default async function handler(req, res) {
       const page = Math.max(1, parseInt(body.page) || 1);
       const perPage = 10;
       const offset = (page - 1) * perPage;
-      // นับทั้งหมด
-      const { count } = await supabase.from('logs').select('*', { count: 'exact', head: true }).ilike('username', uname);
-      // ดึงเฉพาะหน้านี้ (เรียงใหม่→เก่าด้วย id)
-      const { data } = await supabase.from('logs').select('*')
-        .ilike('username', uname)
-        .order('id', { ascending: false })
-        .range(offset, offset + perPage - 1);
+      // แปลงวันที่ DD/MM/YYYY → YYYY-MM-DD (ถ้ามี)
+      const toISO = (d) => {
+        if (!d) return null;
+        if (String(d).includes('/')) { const [dd, mm, yy] = String(d).split('/'); return `${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`; }
+        return d;
+      };
+      const dFrom = toISO(body.dateFrom), dTo = toISO(body.dateTo);
+      // สร้าง query ฐาน (filter ช่วงวันที่ถ้ามี)
+      let countQ = supabase.from('logs').select('*', { count: 'exact', head: true }).ilike('username', uname);
+      let dataQ = supabase.from('logs').select('*').ilike('username', uname);
+      if (dFrom) { countQ = countQ.gte('log_date', dFrom); dataQ = dataQ.gte('log_date', dFrom); }
+      if (dTo)   { countQ = countQ.lte('log_date', dTo);   dataQ = dataQ.lte('log_date', dTo); }
+      const { count } = await countQ;
+      const { data } = await dataQ.order('id', { ascending: false }).range(offset, offset + perPage - 1);
       // force_stop_log ของ user (หาคนหยุด)
       const { data: fsl } = await supabase.from('force_stop_log').select('*').ilike('target_user', uname);
       const fslList = fsl || [];
