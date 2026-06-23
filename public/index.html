@@ -4336,19 +4336,21 @@ function applyLiveCollapsed(){
   }
 }
 
+var __liveLoading=false;
 function loadLiveActivities(){
   if(!currentUser)return;
+  if(__liveLoading)return;
   var uname=String(currentUser.username).toLowerCase();
   var role=(currentUser.role||'').toLowerCase();
-  // อนุญาต: admin หลัก, superadmin, admin, monitor (ทุกคนที่ดู Live Monitor ได้)
   if(uname!=='admin' && role!=='superadmin' && role!=='admin' && role!=='monitor')return;
-  // แสดง loading เฉพาะตอนยังไม่มีข้อมูล (กันกระพริบตอน auto-refresh)
   var listEl=document.getElementById('liveList');
-  if(listEl && (!listEl.children.length || listEl.querySelector('.live-empty'))){
+  if(listEl && !listEl.children.length){
     listEl.innerHTML='<div class="live-empty">⏳ กำลังโหลด...</div>';
   }
+  __liveLoading=true;
   google.script.run
     .withSuccessHandler(function(res){
+      __liveLoading=false;
       if(res && res.expired){ handleExpired(); return; }
       if(res && res.kicked){ handleKicked(); return; }
       if(res && res.success){ renderLiveActivities(res.activities||[], res.serverNow); }
@@ -4357,7 +4359,8 @@ function loadLiveActivities(){
       }
     })
     .withFailureHandler(function(e){
-      if(listEl) listEl.innerHTML='<div class="live-empty">⚠️ โหลดไม่สำเร็จ กดรีเฟรชอีกครั้ง<br><span style="font-size:11px;color:#7e8db0">'+(e&&e.message?e.message:'')+'</span></div>';
+      __liveLoading=false;
+      if(listEl && !listEl.children.length) listEl.innerHTML='<div class="live-empty">⚠️ โหลดไม่สำเร็จ กดรีเฟรชอีกครั้ง</div>';
     })
     .getLiveActivities(currentUser.username, currentUser.token);
 }
