@@ -164,20 +164,22 @@ export default async function handler(req, res) {
 
     // ---------- ตรวจสถานะ (polling 30 วิ): กิจกรรมที่ทำอยู่ถูก admin หยุดให้ไหม ----------
     if (body.action === 'pollStatus') {
-      const { localTypes } = body;  // กิจกรรมที่ frontend กำลังทำอยู่ เช่น ['smoking','break']
+      const { localActs } = body;  // [{type, startMs}] กิจกรรมที่ frontend ทำอยู่ + เวลาเริ่ม
       const today = new Date().toISOString().slice(0, 10);
       const forcedStops = [];
-      if (localTypes && localTypes.length) {
+      if (localActs && localActs.length) {
         const { data: run } = await supabase.from('running').select('activity_type').ilike('username', uname);
         const runningTypes = (run || []).map(r => r.activity_type);
         const { data: fsl } = await supabase.from('force_stop_log').select('*')
           .ilike('target_user', uname).eq('log_date', today)
           .order('created_at', { ascending: false });
         const fslList = fsl || [];
-        for (const type of localTypes) {
-          if (runningTypes.includes(type)) continue;  // ยังทำอยู่ ไม่ถูกหยุด
-          const displayType = TYPE_MAP[type] || type;
-          const m = fslList.find(f => f.display_type === displayType);
+        for (const act of localActs) {
+          if (runningTypes.includes(act.type)) continue;  // ยังทำอยู่ ไม่ถูกหยุด
+          const displayType = TYPE_MAP[act.type] || act.type;
+          // หา force_stop ที่เกิดหลังเวลาเริ่มปัจจุบัน (รอบนี้) — กันเจอของเก่ารอบก่อน
+          const m = fslList.find(f => f.display_type === displayType &&
+            new Date(f.created_at).getTime() > (act.startMs || 0));
           if (m) {
             forcedStops.push({
               activityType: displayType, stopperUser: m.stopper_user,
