@@ -128,6 +128,34 @@ export default async function handler(req, res) {
       return json(res, { success: true, logs });
     }
 
+    // ---------- ประวัติย้อนหลัง (ทุกวัน) + แบ่งหน้า 10 รายการ ----------
+    if (body.action === 'historyLogs') {
+      const page = Math.max(1, parseInt(body.page) || 1);
+      const perPage = 10;
+      const offset = (page - 1) * perPage;
+      // นับทั้งหมด
+      const { count } = await supabase.from('logs').select('*', { count: 'exact', head: true }).ilike('username', uname);
+      // ดึงเฉพาะหน้านี้ (เรียงใหม่→เก่าด้วย id)
+      const { data } = await supabase.from('logs').select('*')
+        .ilike('username', uname)
+        .order('id', { ascending: false })
+        .range(offset, offset + perPage - 1);
+      // force_stop_log ของ user (หาคนหยุด)
+      const { data: fsl } = await supabase.from('force_stop_log').select('*').ilike('target_user', uname);
+      const fslList = fsl || [];
+      const logs = (data || []).map(r => {
+        const m = fslList.find(f => f.display_type === r.display_type && f.stop_str === r.stop_str && f.log_date === r.log_date);
+        const stopperLabel = m ? `@${m.stopper_user} (${m.stopper_role || 'ผู้ดูแล'})` : '';
+        return [
+          r.log_date, r.stop_str || '', r.username, r.display_name || '',
+          r.display_type || '', r.start_str || '', r.stop_str || '',
+          (r.minutes != null ? r.minutes : ''), stopperLabel,
+        ];
+      });
+      const totalPages = Math.max(1, Math.ceil((count || 0) / perPage));
+      return json(res, { success: true, logs, page, totalPages, total: count || 0 });
+    }
+
     // ---------- กิจกรรมค้าง (ของตัวเอง) ----------
     if (body.action === 'running') {
       const { data } = await supabase.from('running').select('*').ilike('username', uname);
