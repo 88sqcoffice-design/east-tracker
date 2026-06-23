@@ -95,7 +95,7 @@ export default async function handler(req, res) {
       const d = toISODate(date);
       const { data } = await supabase.from('logs').select('*')
         .ilike('username', targetUsername).eq('log_date', d)
-        .order('created_at', { ascending: true });
+        .order('id', { ascending: false });  // ใหม่→เก่า ด้วย id (แม่นกว่า created_at)
       const entries = (data || []).map(r => ({
         id: r.id,                              // ใช้ลบแม่นยำ (แทน rowIndex)
         date: d, displayType: r.display_type,
