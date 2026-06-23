@@ -1606,8 +1606,35 @@ body.theme-cosmic{background:#fafaf3}
     <!-- ===== SECTION: จัดการข้อมูล ===== -->
     <div class="sa-section" id="sec-data" data-sec="data">
       <div class="sec-title" style="margin-top:0">🗄️ จัดการข้อมูล</div>
-      <div class="card" style="padding:24px">
-        <div class="log-empty">กำลังพัฒนา — เก็บ LOGS เก่า / ประวัติการกดหยุด</div>
+
+      <!-- สถิติฐานข้อมูล -->
+      <div class="card" style="padding:24px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <div style="font-weight:700;font-size:15px">📊 สถิติฐานข้อมูล</div>
+          <button class="btn-s" style="margin:0;padding:7px 14px;font-size:13px" onclick="loadDbStats()">🔄 รีเฟรช</button>
+        </div>
+        <div id="dbStatsBox"><div class="log-empty">⏳ กำลังโหลด...</div></div>
+      </div>
+
+      <!-- สำรองข้อมูล -->
+      <div class="card" style="padding:24px;margin-bottom:16px">
+        <div style="font-weight:700;font-size:15px;margin-bottom:8px">💾 สำรองข้อมูล (Backup)</div>
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">ดาวน์โหลด LOGS ทั้งหมดเป็นไฟล์ CSV เก็บไว้ก่อนลบข้อมูลเก่า</p>
+        <button class="btn-p" style="width:100%;padding:13px" onclick="exportAllLogs(this)">📥 ดาวน์โหลด LOGS ทั้งหมด (CSV)</button>
+      </div>
+
+      <!-- ลบข้อมูลเก่า -->
+      <div class="card" style="padding:24px;border:1px solid rgba(248,113,113,.25)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:8px;color:#fca5a5">🗑 ลบข้อมูลเก่า</div>
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;line-height:1.6">ลบ LOGS และประวัติการกดหยุดที่เก่ากว่าวันที่เลือก เพื่อเก็บพื้นที่ <b style="color:#fca5a5">(ลบถาวร กู้คืนไม่ได้!)</b><br>💡 แนะนำดาวน์โหลด CSV สำรองก่อน</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <div style="flex:1;min-width:180px">
+            <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:6px">ลบข้อมูลก่อนวันที่:</label>
+            <input type="date" id="deleteBeforeDate" style="width:100%;padding:11px 14px;background:rgba(8,12,24,.65);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--mono);font-size:14px;outline:none">
+          </div>
+          <button class="btn-s" id="deleteOldBtn" style="margin:0;padding:11px 18px;color:#fca5a5;border-color:rgba(248,113,113,.4);align-self:flex-end" onclick="deleteOldData(this)">🗑 ลบข้อมูลเก่า</button>
+        </div>
+        <div id="deleteOldResult" style="margin-top:12px;font-size:13px"></div>
       </div>
     </div><!-- /sec-data -->
 
@@ -1930,6 +1957,9 @@ body.theme-cosmic{background:#fafaf3}
     getAdminRangeReport: { url: '/api/reports', build: function (a) { return { action: 'range', token: a[1], dateFrom: a[2], dateTo: a[3] }; } },
     getUserDayDetail: { url: '/api/reports', build: function (a) { return { action: 'userDetail', token: a[1], targetUsername: a[2], date: a[3] }; } },
     deleteLogEntry: { url: '/api/reports', build: function (a) { return { action: 'deleteEntry', token: a[1], entryId: (a[2] && a[2].id) }; } },
+    getDbStats: { url: '/api/data', build: function (a) { return { action: 'dbStats', token: a[1] }; } },
+    exportAllData: { url: '/api/data', build: function (a) { return { action: 'exportAll', token: a[1] }; } },
+    deleteOldLogs: { url: '/api/data', build: function (a) { return { action: 'deleteOldLogs', token: a[1], beforeDate: a[2] }; } },
 
     // ===== STAFF =====
     getStaffList: { url: '/api/staff', build: function (a) { return { action: 'list', token: a[1] }; } },
@@ -3967,6 +3997,7 @@ function saSwitch(sec){
   if(sec==='live'){ try{ loadLiveActivities(); }catch(e){} }
   // ถ้าเข้าหน้าจัดการพนักงาน → โหลดรายชื่อ (ถ้ามีฟังก์ชัน)
   if(sec==='staff'){ try{ if(typeof loadStaffList==='function') loadStaffList(); }catch(e){} }
+  if(sec==='data'){ try{ loadDbStats(); }catch(e){} }
 }
 
 // เปิด/ปิดโหมด superadmin (sidebar) — superadmin เห็นเมนู, admin ธรรมดาเห็นแบบเดิม
@@ -4576,6 +4607,86 @@ document.addEventListener('click', function(e){
     panel.classList.remove('show');
   }
 });
+
+// ===== จัดการข้อมูล =====
+var TBL_LABEL={logs:'ประวัติกิจกรรม (LOGS)',force_stop_log:'ประวัติการกดหยุด',users:'ผู้ใช้งาน',running:'กำลังทำอยู่ตอนนี้',activity_log:'บันทึกการกระทำ (กระดิ่ง)'};
+function loadDbStats(){
+  if(!currentUser)return;
+  var box=document.getElementById('dbStatsBox');
+  if(box) box.innerHTML='<div class="log-empty">⏳ กำลังโหลด...</div>';
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res&&res.expired){handleExpired();return;}
+      if(!res||!res.success){ if(box) box.innerHTML='<div class="log-empty">⚠️ '+((res&&res.message)||'โหลดไม่สำเร็จ')+'</div>'; return; }
+      var html='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">';
+      for(var t in res.stats){ if(!res.stats.hasOwnProperty(t))continue;
+        html+='<div style="background:rgba(8,12,24,.5);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
+          +'<div style="font-family:var(--mono);font-weight:700;font-size:24px;color:var(--num-color)">'+Number(res.stats[t]).toLocaleString()+'</div>'
+          +'<div style="font-size:11px;color:var(--text-dim);margin-top:4px">'+(TBL_LABEL[t]||t)+'</div></div>';
+      }
+      html+='</div>';
+      if(res.oldestDate||res.newestDate){
+        html+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:13px;color:var(--text-dim)">'
+          +'📅 ข้อมูลตั้งแต่ <b style="color:var(--text)">'+(res.oldestDate||'-')+'</b> ถึง <b style="color:var(--text)">'+(res.newestDate||'-')+'</b></div>';
+      }
+      if(box) box.innerHTML=html;
+    })
+    .withFailureHandler(function(e){ if(box) box.innerHTML='<div class="log-empty">⚠️ '+(e&&e.message||'')+'</div>'; })
+    .getDbStats(currentUser.username, currentUser.token);
+}
+function exportAllLogs(btn){
+  if(!currentUser)return;
+  var orig=btn?btn.innerHTML:'';
+  if(btn){ btn.disabled=true; btn.innerHTML='⏳ กำลังเตรียมไฟล์...'; }
+  function restore(){ if(btn){ btn.disabled=false; btn.innerHTML=orig||'📥 ดาวน์โหลด LOGS ทั้งหมด (CSV)'; } }
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res&&res.expired){restore();handleExpired();return;}
+      if(!res||!res.success||!res.logs){ restore(); toast('⚠️ ไม่สำเร็จ',(res&&res.message)||'','err'); return; }
+      if(res.logs.length===0){ restore(); toast('ℹ️ ไม่มีข้อมูล','ยังไม่มี LOGS ให้ดาวน์โหลด'); return; }
+      // สร้าง CSV
+      var head=['วันที่','ผู้ใช้','ชื่อ','กิจกรรม','เริ่ม','หยุด','นาที'];
+      var rows=[head.join(',')];
+      res.logs.forEach(function(r){
+        var line=[r.log_date||'',r.username||'',r.display_name||'',r.display_type||'',r.start_str||'',r.stop_str||'',(r.minutes!=null?r.minutes:'')];
+        rows.push(line.map(function(v){ v=String(v).replace(/"/g,'""'); return /[",\n]/.test(v)?'"'+v+'"':v; }).join(','));
+      });
+      var csv='\ufeff'+rows.join('\r\n');  // BOM กันภาษาไทยเพี้ยนใน Excel
+      var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url; a.download='east_logs_'+new Date().toISOString().slice(0,10)+'.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      restore();
+      toast('📥 ดาวน์โหลดแล้ว',res.logs.length+' รายการ');
+    })
+    .withFailureHandler(function(e){ restore(); toast('❌ ผิดพลาด',e&&e.message||'','err'); })
+    .exportAllData(currentUser.username, currentUser.token);
+}
+function deleteOldData(btn){
+  if(!currentUser)return;
+  var date=document.getElementById('deleteBeforeDate').value;
+  if(!date){ toast('⚠️ เลือกวันที่','กรุณาเลือกวันที่ก่อนลบ','err'); return; }
+  var dmy=date.split('-').reverse().join('/');
+  if(!confirm('⚠️ ลบ LOGS และประวัติการกดหยุดทั้งหมดที่เก่ากว่า '+dmy+' ?\n\nลบถาวร กู้คืนไม่ได้!\n(แนะนำดาวน์โหลด CSV สำรองก่อน)'))return;
+  var orig=btn?btn.innerHTML:'';
+  if(btn){ btn.disabled=true; btn.innerHTML='⏳ กำลังลบ...'; }
+  var resBox=document.getElementById('deleteOldResult');
+  function restore(){ if(btn){ btn.disabled=false; btn.innerHTML=orig||'🗑 ลบข้อมูลเก่า'; } }
+  google.script.run
+    .withSuccessHandler(function(res){
+      restore();
+      if(res&&res.expired){handleExpired();return;}
+      if(!res||!res.success){ if(resBox) resBox.innerHTML='<span style="color:#fca5a5">⚠️ '+((res&&res.message)||'ไม่สำเร็จ')+'</span>'; return; }
+      var total=(res.deletedLogs||0)+(res.deletedForceStop||0);
+      if(resBox) resBox.innerHTML='<span style="color:var(--ok,#34d399)">✅ ลบแล้ว '+total+' รายการ (logs '+(res.deletedLogs||0)+' + ประวัติหยุด '+(res.deletedForceStop||0)+')</span>';
+      toast('🗑 ลบข้อมูลเก่าแล้ว',total+' รายการ');
+      loadDbStats();  // อัปเดตสถิติ
+    })
+    .withFailureHandler(function(e){ restore(); if(resBox) resBox.innerHTML='<span style="color:#fca5a5">⚠️ '+(e&&e.message||'')+'</span>'; })
+    .deleteOldLogs(currentUser.username, currentUser.token, date);
+}
 
 function startLiveMonitor(){
   if(liveTimer)clearInterval(liveTimer);
