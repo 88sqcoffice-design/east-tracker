@@ -929,6 +929,7 @@ body.theme-cosmic{background:#fafaf3}
 .img-mode-tab.active{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff}
 .img-section{display:none}
 .img-section.active{display:block}
+.log-by{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:rgba(220,38,38,.15);color:#f87171;font-size:.78rem;font-weight:600;}
 </style>
 </head>
 <body>
@@ -1922,6 +1923,7 @@ body.theme-cosmic{background:#fafaf3}
     getTodayLogs: { url: '/api/activity', build: function (a) { return { action: 'todayLogs', token: a[1] }; } },
     getSummary: { url: '/api/activity', build: function (a) { return { action: 'summary', token: a[1] }; } },
     getRunningActivities: { url: '/api/activity', build: function (a) { return { action: 'running', token: a[1] }; } },
+    pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localTypes: a[2] }; } },
 
     // ===== REPORTS =====
     getAdminDailyReport: { url: '/api/reports', build: function (a) { return { action: 'daily', token: a[1], date: a[2] }; } },
@@ -2895,6 +2897,31 @@ window.addEventListener('offline', function(){
 });
 setInterval(pingServer, 10000);
 
+// ===== POLLING: ตรวจว่ากิจกรรมที่ทำอยู่ถูก admin หยุดให้ไหม (ทุก 30 วิ) =====
+function pollForcedStop(){
+  if(!isOnline || !currentUser) return;
+  var localTypes = Object.keys(running);
+  if(localTypes.length === 0) return;  // ไม่มีกิจกรรมทำอยู่ → ไม่ต้องเช็ค
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res && res.forcedStops && res.forcedStops.length){
+        res.forcedStops.forEach(function(fs){
+          // หา type (en) จากชื่อไทย (displayType) เพื่อปิด UI ให้ถูกการ์ด
+          var enType = null;
+          for(var t in META){ if(META[t] && META[t].name === fs.activityType){ enType = t; break; } }
+          if(enType && running[enType]){
+            finishStopUI(enType, fs.minutes);   // ปิด popup + การ์ด + ลบ running local
+            showForcedStopInfo(fs);             // เด้ง popup บอกใครหยุด เวลาเท่าไหร่
+          }
+        });
+        loadLogs(); loadSummary();
+      }
+    })
+    .withFailureHandler(function(){})
+    .pollStatus(currentUser.username, currentUser.token, localTypes);
+}
+setInterval(pollForcedStop, 30000);  // ทุก 30 วินาที
+
 // ===== RESTORE SESSION =====
 function tryRestoreSession(){
   if(!checkDevice())return;
@@ -3585,7 +3612,8 @@ function loadLogs(){
           else if(typeText.indexOf('กินข้าว')!==-1)lim=20;
           var over=(lim>0 && usedMin>lim);
           var mins=(r[7]!==''&&r[7]!=null)?'<span class="log-dur">⏳ '+r[7]+' นาที'+(over?' ⚠️':'')+'</span>':'';
-          html+='<div class="log-item'+(over?' over':'')+'"><span class="log-type">'+typeText+'</span>'
+          var byWho=(r[8])?'<span class="log-by">⛔ หยุดโดย '+escapeHtml(String(r[8]))+'</span>':'';
+          html+='<div class="log-item'+(over?' over':'')+'"><span class="log-type">'+typeText+'</span>'+byWho
                +'<span class="log-time">▶ '+r[5]+'</span><span class="log-time">◼ '+r[6]+'</span>'+mins+'</div>';
         }
       }
