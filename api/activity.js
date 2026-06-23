@@ -2,7 +2,7 @@
 // api/activity.js — เริ่ม/หยุดกิจกรรม + โควต้า + ประวัติ
 // เรียก: POST /api/activity  body: { action, token, ... }
 // ============================================================
-import { supabase, QUOTA, TYPE_MAP, getUserByToken, logAction, json } from './_lib/supabase.js';
+import { supabase, QUOTA, TYPE_MAP, getUserByToken, logAction, json, thaiTimeStr } from './_lib/supabase.js';
 
 // คำนวณโควต้าจาก logs วันนี้ (SQL SUM — เร็วมาก)
 async function getQuota(username) {
@@ -78,7 +78,7 @@ export default async function handler(req, res) {
       }
 
       // มี running จริง → บันทึก log
-      const nowStr = new Date().toTimeString().slice(0, 8);  // HH:mm:ss
+      const nowStr = thaiTimeStr();  // เวลาไทย
       await supabase.from('logs').insert({
         username: uname, display_name: dname,
         activity_type: activityType, display_type: displayType,
@@ -205,7 +205,7 @@ export default async function handler(req, res) {
           .ilike('username', uname).eq('display_type', displayType).eq('log_date', today)
           .limit(1);
         if (exist && exist.length) continue;  // มีแล้ว ข้าม
-        const nowStrB = new Date().toTimeString().slice(0, 8);
+        const nowStrB = thaiTimeStr();
         await supabase.from('logs').insert({
           username: uname, display_name: dname,
           activity_type: item.type, display_type: displayType,
