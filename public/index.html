@@ -2934,21 +2934,20 @@ function tryRestoreSession(){
     toast('🕐 หมดเวลาเซสชัน','ครบ 12 ชั่วโมงหลังเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่','warn');
     return;
   }
-  // แสดงหน้าใช้งานทันทีจาก local (optimistic) — ไม่ให้กระพริบหน้า login ระหว่างรอ server
-  currentUser=s; enterApp(); startSessionExpiryTimer();
   google.script.run
     .withSuccessHandler(function(res){
       if(res&&res.valid){
         if(typeof res.role!=='undefined'){ s.role=res.role||''; saveSession(s); }
+        currentUser=s; enterApp(); startSessionExpiryTimer();
       }
       else if(res && res.expired){
-        clearSessionLocal(); currentUser=null; resetButtons(); showScreen('loginScreen');
+        clearSessionLocal();
         toast('🕐 หมดเวลาเซสชัน','ครบ 12 ชั่วโมงหลังเข้าสู่ระบบ — กรุณาเข้าสู่ระบบใหม่','warn');
       }
-      else{ clearSessionLocal(); currentUser=null; resetButtons(); showScreen('loginScreen'); }
+      else{ clearSessionLocal(); }
     })
     .withFailureHandler(function(){
-      isOnline=false;
+      currentUser=s; isOnline=false; enterApp(); startSessionExpiryTimer();
       toast('🔴 ออฟไลน์','เข้าใช้แบบไม่มีเน็ต — จะซิงค์เมื่อเน็ตกลับมา','warn');
     })
     .validateSession(s.username, s.token);
