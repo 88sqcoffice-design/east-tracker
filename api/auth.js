@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       // สร้าง token + เก็บเป็น session (เครื่องใหม่ login → เครื่องเก่าหลุด)
       const token = makeToken(user.username);
       await supabase.from('settings').upsert({
-        key: `sess_${user.username.toLowerCase()}`, value: token, updated_at: new Date().toISOString(),
+        key: `sess_${user.username.toLowerCase()}`, value: token,
       });
 
       return json(res, {
