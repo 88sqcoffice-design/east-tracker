@@ -33,16 +33,16 @@ export function hashPassword(pw) {
 }
 
 // ---------- ตรวจ session token ----------
-// (เวอร์ชันเริ่มต้น: token = username:hash — เปลี่ยนเป็น Supabase Auth ภายหลังได้)
+// รูปแบบ token: username-randomhex-timestamp (frontend ใช้ timestamp ส่วนท้ายเช็คอายุ 12 ชม.)
 export function makeToken(username) {
-  const rand = crypto.randomBytes(16).toString('hex');
-  return `${username}:${rand}`;
+  const rand = crypto.randomBytes(12).toString('hex');
+  return `${username}-${rand}-${Date.now()}`;
 }
 
 // ---------- ตรวจสิทธิ์ ----------
 export async function getUserByToken(token) {
   if (!token) return null;
-  const username = String(token).split(':')[0];
+  const username = String(token).split('-')[0];  // username อยู่หน้าสุด (username ไม่มี -)
   const { data } = await supabase.from('users').select('*').ilike('username', username).single();
   if (!data) return null;
   // ตรวจ token ตรงกับที่เก็บใน settings (session)
