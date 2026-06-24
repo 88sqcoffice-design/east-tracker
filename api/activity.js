@@ -233,6 +233,13 @@ export default async function handler(req, res) {
       // ===== เช็คเวลาครบ/เกิน แล้วส่ง Telegram (real-time ขณะกิจกรรมยังทำอยู่) =====
       // วน running ทั้งหมดในระบบ (ใครก็ได้ที่ poll จะ trigger เช็คให้ทุกคน) — กันส่งซ้ำด้วย flag atomic
       try {
+        // throttle: scan แค่ทุก ~13 วิ (ไม่ว่ากี่คน poll พร้อมกัน) — ลดภาระ backend มหาศาล
+        const lastScan = Number(await getSetting('tg_last_scan', '0'));
+        const nowScan = Date.now();
+        if (nowScan - lastScan < 13000) {
+          return json(res, { success: true, forcedStops });  // เพิ่ง scan ไป → ข้าม (คนอื่นทำแล้ว)
+        }
+        await supabase.from('settings').upsert({ key: 'tg_last_scan', value: String(nowScan) }, { onConflict: 'key' });
         const interval = parseInt(await getSetting('tg_overtime_minutes', '3')) || 3;  // ช่วงเตือนซ้ำหลังเกิน (นาที)
         const { data: allRun } = await supabase.from('running').select('*');
         const nowMs = Date.now();
