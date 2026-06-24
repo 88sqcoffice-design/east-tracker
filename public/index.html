@@ -1430,6 +1430,7 @@ body.theme-winter #spaceBg::before{background-image:
       <span class="net-pill online" id="netPill"><span class="net-dot"></span>ออนไลน์</span>
     </div>
     <div class="topbar-right">
+      <span id="empBellHost"></span>
       <div class="user-info">
         <div class="user-name" id="dashUser">—</div>
         <div class="user-id" id="dashUserId">@—</div>
@@ -3147,7 +3148,9 @@ function pollForcedStop(){
   if(!isOnline || !currentUser) return;
   var localActs = [];
   for(var t in running){ if(running.hasOwnProperty(t)) localActs.push({type:t, startMs:running[t].startMs}); }
-  if(localActs.length === 0) return;  // ไม่มีกิจกรรมทำอยู่ → ไม่ต้องเช็ค
+  // เรียก pollStatus ถ้า: มีกิจกรรมทำอยู่ OR เป็น admin/monitor (เพื่อ trigger แจ้งเตือน Telegram ให้ทุกคน)
+  var isAdminOrMon = window.__isMonitor || (currentUser.role && ['admin','superadmin','monitor'].indexOf(String(currentUser.role).toLowerCase())>=0) || String(currentUser.username).toLowerCase()==='admin';
+  if(localActs.length === 0 && !isAdminOrMon) return;  // พนักงานทั่วไปที่ไม่มีกิจกรรม → ไม่ต้องเรียก
   google.script.run
     .withSuccessHandler(function(res){
       if(res && res.forcedStops && res.forcedStops.length){
@@ -4208,6 +4211,7 @@ function enterApp(){
     document.getElementById('adminDate').textContent=toDMY(n);
     applyMonitorRestrictions(false);
     moveLiveMonitorToAdmin();  // ย้าย Live Monitor กลับ (เผื่อ monitor เคย login ค้าง)
+    moveBellToAdmin();  // ย้ายกระดิ่งกลับ topbar admin
     var allowedSecs = isSuper
       ? ['report','live','staff','data','settings']
       : ['report','live','settings'];
@@ -4222,6 +4226,8 @@ function enterApp(){
     showScreen('dashboardScreen');
     document.getElementById('empMenuLive').style.display='';  // แสดงเมนู Live (เฉพาะ monitor)
     moveLiveMonitorToEmp();  // ย้าย Live Monitor UI มาหน้าพนักงาน
+    moveBellToEmp();  // ย้ายกระดิ่งมาหน้า monitor
+    startBellPolling();  // เปิดกระดิ่งแจ้งเตือนให้ monitor
     if(typeof empSwitch==='function') empSwitch('activity');
     reloadData();
     startQuotaTick();
@@ -4254,6 +4260,22 @@ function moveLiveMonitorToEmp(){
       host.appendChild(liveWrap);
       liveWrap.classList.remove('collapsed');  // เปิดไว้เสมอ
     }
+  } catch(e){}
+}
+// ย้ายกระดิ่งแจ้งเตือนไปหน้าพนักงาน (สำหรับ monitor)
+function moveBellToEmp(){
+  try {
+    var bell=document.getElementById('bellWrap');
+    var host=document.getElementById('empBellHost');
+    if(bell && host && bell.parentElement!==host){ host.appendChild(bell); }
+  } catch(e){}
+}
+// ย้ายกระดิ่งกลับ topbar ของ admin
+function moveBellToAdmin(){
+  try {
+    var bell=document.getElementById('bellWrap');
+    var adminRight=document.querySelector('#adminScreen .topbar-right');
+    if(bell && adminRight && bell.parentElement!==adminRight){ adminRight.insertBefore(bell, adminRight.firstChild); }
   } catch(e){}
 }
 
