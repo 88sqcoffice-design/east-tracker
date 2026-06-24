@@ -3308,6 +3308,16 @@ function startActivity(type){
   if(!currentUser){toast('⚠️ กรุณาเข้าสู่ระบบก่อน','','err');return;}
   if(!META[type]) buildMeta();  // กันพลาด: ถ้า META ว่าง build ใหม่ก่อนใช้
   if(running[type]){toast('⚠️ กิจกรรมนี้กำลังทำงานอยู่','','err');return;}
+  // ทำได้ทีละกิจกรรม — ถ้ามีกิจกรรมอื่นทำอยู่ ต้องหยุดก่อน
+  var activeKeys = Object.keys(running);
+  if(activeKeys.length > 0){
+    var otherT = activeKeys[0];
+    var otherName = (META[otherT] && META[otherT].name) || otherT;
+    toast('⚠️ มีกิจกรรมทำอยู่','กรุณาหยุด "'+otherName+'" ก่อนเริ่มกิจกรรมใหม่','err');
+    // เปิด popup ของกิจกรรมที่ทำอยู่ (เผื่อ popup หาย)
+    if(!popupType && running[otherT]) openTimerPopup(otherT, running[otherT].startStr);
+    return;
+  }
   // ปิด popup "ถูกหยุดให้แล้ว" ถ้าค้างอยู่ (เผื่อเพิ่งถูก admin หยุด แล้วกดเริ่มใหม่)
   var fsBg=document.getElementById('fsModalBg'); if(fsBg) fsBg.remove();
   var fsWrap=document.getElementById('fsModalWrap'); if(fsWrap) fsWrap.remove();
