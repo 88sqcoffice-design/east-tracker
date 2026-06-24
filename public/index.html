@@ -2591,11 +2591,11 @@ function openTgModal(){
   // โหลดค่าปัจจุบันจาก server
   google.script.run
     .withSuccessHandler(function(res){
-      if(res && res.success && res.settings){
-        document.getElementById('tgBotToken').value = res.settings.botToken || '';
-        document.getElementById('tgChatId').value = res.settings.chatId || '';
-        document.getElementById('tgOvertimeMin').value = res.settings.overtimeMin || 3;
-        document.getElementById('tgEnabled').checked = !!res.settings.enabled;
+      if(res && res.success){
+        document.getElementById('tgBotToken').value = res.botToken || '';
+        document.getElementById('tgChatId').value = res.chatId || '';
+        document.getElementById('tgOvertimeMin').value = res.overtimeMinutes || 20;
+        document.getElementById('tgEnabled').checked = !!res.enabled;
       }
     })
     .withFailureHandler(function(e){ toast('❌ โหลดการตั้งค่าไม่ได้',e.message,'err'); })
@@ -2608,7 +2608,7 @@ function saveTgSettings(){
   var cfg = {
     botToken: document.getElementById('tgBotToken').value.trim(),
     chatId: document.getElementById('tgChatId').value.trim(),
-    overtimeMin: parseInt(document.getElementById('tgOvertimeMin').value,10) || 3,
+    overtimeMinutes: parseInt(document.getElementById('tgOvertimeMin').value,10) || 20,
     enabled: document.getElementById('tgEnabled').checked
   };
   google.script.run
