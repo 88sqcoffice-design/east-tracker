@@ -2,7 +2,7 @@
 // api/activity.js — เริ่ม/หยุดกิจกรรม + โควต้า + ประวัติ
 // เรียก: POST /api/activity  body: { action, token, ... }
 // ============================================================
-import { supabase, QUOTA, TYPE_MAP, getUserByToken, logAction, json, thaiTimeStr, sendTelegram, thaiDateStr, thaiStartDate } from './_lib/supabase.js';
+import { supabase, QUOTA, TYPE_MAP, ACT_ICON, ACT_LIMIT, getUserByToken, logAction, json, thaiTimeStr, sendTelegram, getSetting, thaiDateStr, thaiStartDate } from './_lib/supabase.js';
 
 // คำนวณโควต้าจาก logs วันนี้ (SQL SUM — เร็วมาก)
 async function getQuota(username) {
@@ -87,10 +87,12 @@ export default async function handler(req, res) {
       });
 
       await logAction(uname, user.role, 'หยุดกิจกรรม', `${dname} หยุด "${displayType}" (${minutes} นาที)`);
-      // แจ้ง Telegram ถ้าเกินเวลาที่กำหนด
-      const lim = (displayType.includes('พักเบรค')) ? QUOTA.break : ((displayType.includes('สูบบุหรี่')||displayType.includes('ห้องน้ำ')||displayType.includes('กินข้าว')) ? QUOTA.smoking : 0);
+      // แจ้ง Telegram เมื่อหยุดเอง + เกินเวลาที่กำหนด
+      const lim = ACT_LIMIT[displayType] || 0;
       if (lim > 0 && minutes > lim) {
-        await sendTelegram(`🚨 <b>เกินเวลา</b>\n<b>${dname}</b> ทำ "${displayType}" ไป ${minutes} นาที (เกิน ${lim} นาที)`);
+        const sIcon = ACT_ICON[displayType] || '⏱️';
+        const sOver = Math.round((minutes - lim) * 100) / 100;
+        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที) ⚠️ เกินมา ${sOver} นาที`);
       }
 
       const quota = await getQuota(uname);
@@ -228,6 +230,41 @@ export default async function handler(req, res) {
           }
         }
       }
+      // ===== เช็คเวลาครบ/เกิน แล้วส่ง Telegram (real-time ขณะกิจกรรมยังทำอยู่) =====
+      // วน running ทั้งหมดในระบบ (ใครก็ได้ที่ poll จะ trigger เช็คให้ทุกคน) — กันส่งซ้ำด้วย flag atomic
+      try {
+        const interval = parseInt(await getSetting('tg_overtime_minutes', '3')) || 3;  // ช่วงเตือนซ้ำหลังเกิน (นาที)
+        const { data: allRun } = await supabase.from('running').select('*');
+        const nowMs = Date.now();
+        for (const r of (allRun || [])) {
+          const dispType = r.activity_type;                       // running.activity_type เก็บเป็นชื่อไทยอยู่แล้ว
+          const limit = ACT_LIMIT[dispType];                       // 120 / 20 / 0(assist)
+          if (!limit || limit <= 0) continue;                      // ช่วยงานบริษัท = ไม่จำกัด
+          const icon = ACT_ICON[dispType] || '⏱️';
+          const elapsed = (nowMs - Number(r.start_ms)) / 60000;    // นาทีที่ทำไป
+          // --- (1) ครบเวลา: ส่งครั้งเดียว (atomic: set notified_limit false→true) ---
+          if (elapsed >= limit && !r.notified_limit) {
+            const { data: lk } = await supabase.from('running')
+              .update({ notified_limit: true }).eq('id', r.id).eq('notified_limit', false).select('id');
+            if (lk && lk.length > 0) {
+              await sendTelegram(`⏰ <b>ครบเวลาที่กำหนด</b>\n${icon} กิจกรรม: ${dispType}\n\n👤 ${r.display_name || r.username} (@${r.username})\n\n🕐 เริ่มเมื่อ ${r.start_str || '-'}\n⏱️ ครบ ${limit} นาทีแล้ว (ทำมา ${Math.round(elapsed)} นาที)`);
+            }
+          }
+          // --- (2) เกินเวลา: เตือนซ้ำทุก interval นาที (atomic: over_step เพิ่มขั้น) ---
+          if (elapsed > limit) {
+            const overMin = elapsed - limit;
+            const step = Math.floor(overMin / interval) + 1;       // ขั้นที่ควรแจ้ง ณ ตอนนี้
+            if (step > (r.over_step || 0)) {
+              const { data: ok } = await supabase.from('running')
+                .update({ over_step: step }).eq('id', r.id).lt('over_step', step).select('id');
+              if (ok && ok.length > 0) {
+                await sendTelegram(`🚨 <b>เกินเวลาที่กำหนด!</b>\n${icon} กิจกรรม: ${dispType}\n\n👤 ${r.display_name || r.username} (@${r.username})\n\n🕐 เริ่มเมื่อ ${r.start_str || '-'}\n⏱️ ทำมาแล้ว ${Math.round(elapsed)} นาที\n⚠️ เกินกำหนดมาแล้ว ${Math.round(overMin)} นาที (limit ${limit} นาที)`);
+              }
+            }
+          }
+        }
+      } catch (e) { /* แจ้งเตือนล้มเหลว ไม่กระทบ poll หลัก */ }
+
       return json(res, { success: true, forcedStops });
     }
 

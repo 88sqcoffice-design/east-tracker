@@ -3,7 +3,7 @@
 // เรียก: POST /api/live  body: { action, token, ... }
 // (Admin/Monitor เท่านั้น)
 // ============================================================
-import { supabase, QUOTA, TYPE_MAP, getUserByToken, isAdminOrMonitor, isAdminLevel, logAction, json, thaiTimeStr, sendTelegram, thaiDateStr, thaiStartDate } from './_lib/supabase.js';
+import { supabase, QUOTA, TYPE_MAP, ACT_ICON, getUserByToken, isAdminOrMonitor, isAdminLevel, logAction, json, thaiTimeStr, sendTelegram, thaiDateStr, thaiStartDate } from './_lib/supabase.js';
 
 const LIMIT_MAP = { break: QUOTA.break, smoking: QUOTA.smoking, toilet: QUOTA.toilet, eat: QUOTA.eat };
 const ROLE_LABEL = { superadmin:'ผู้ดูแลสูงสุด', admin:'ผู้ดูแล', monitor:'ผู้ตรวจสอบ', employee:'พนักงาน' };
@@ -72,7 +72,9 @@ export default async function handler(req, res) {
 
       await logAction(user.username, user.role, 'กดหยุดให้',
         `กดหยุด "${displayType}" ของ ${targetDisplayName || targetUsername} (${minutes} นาที)`);
-      await sendTelegram(`🛑 <b>หยุดกิจกรรม</b>\n@${user.username} หยุด "${displayType}" ของ <b>${targetDisplayName}</b>\n⏱ ใช้ไป ${minutes} นาที`);
+      const fsIcon = ACT_ICON[displayType] || '⏱️';
+      const fsRole = ROLE_LABEL[user.role] || user.role || 'ผู้ดูแล';
+      await sendTelegram(`🛑 <b>มีการกดหยุดให้ (โดยผู้ดูแล)</b>\n${fsIcon} กิจกรรม: ${displayType}\n\n👮 ผู้กดหยุด: @${user.username} (${fsRole})\n\n👤 ผู้ถูกหยุด: ${targetDisplayName || targetUsername} (@${targetUsername})\n\n🕐 ${startStr || '-'} → ${stopStr}\n⏱️ ใช้เวลาไป ${minutes} นาที`);
       return json(res, { success: true, minutes });
     }
 
