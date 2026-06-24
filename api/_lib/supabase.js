@@ -32,6 +32,39 @@ export function thaiTimeStr() {
   return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(11, 19);
 }
 
+// ---------- วันที่ปัจจุบันเวลาไทย YYYY-MM-DD (เส้นแบ่งวัน = เที่ยงคืนไทย) ----------
+export function thaiDateStr() {
+  return new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+// ---------- วันที่เริ่มกิจกรรม (เวลาไทย) จาก durationSec ----------
+export function thaiStartDate(durationSec) {
+  const startMs = Date.now() - (durationSec != null && durationSec >= 0 ? durationSec * 1000 : 0);
+  return new Date(startMs + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+// ---------- ดึงค่า setting ----------
+export async function getSetting(key, def = '') {
+  try {
+    const { data } = await supabase.from('settings').select('value').eq('key', key).single();
+    return data ? data.value : def;
+  } catch (e) { return def; }
+}
+
+// ---------- ส่งแจ้งเตือน Telegram (ถ้าเปิดใช้ + ตั้งค่าครบ) ----------
+export async function sendTelegram(text) {
+  try {
+    const enabled = await getSetting('tg_enabled', 'false');
+    if (enabled !== 'true') return;
+    const botToken = await getSetting('tg_bot_token', '');
+    const chatId = await getSetting('tg_chat_id', '');
+    if (!botToken || !chatId) return;
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    });
+  } catch (e) {}
+}
+
 // ---------- hash password (SHA-256 เหมือนระบบเดิม) ----------
 export function hashPassword(pw) {
   return crypto.createHash('sha256').update(String(pw), 'utf8').digest('hex');
