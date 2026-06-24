@@ -565,6 +565,11 @@ body.theme-cosmic{background:#fafaf3}
   border-radius:9px;color:var(--text);font-family:inherit;font-size:14px;outline:none;
   font-family:var(--mono)}
 .date-input:focus{border-color:var(--accent)}
+/* ไอคอนปฏิทินสีขาว (ทุก input วันที่ — เดิมเป็นสีดำมองไม่เห็นบนพื้นมืด) */
+input[type="date"]::-webkit-calendar-picker-indicator{
+  filter:invert(1) brightness(1.8);
+  cursor:pointer;opacity:.85}
+input[type="date"]::-webkit-calendar-picker-indicator:hover{opacity:1}
 .admin-user-card{background:rgba(10,15,30,.6);border:1px solid var(--border);
   border-radius:12px;padding:18px;margin-bottom:12px;transition:all .2s}
 .admin-user-card.over{border-color:rgba(248,113,113,.45);
@@ -3552,26 +3557,36 @@ function showAdminThresholdPopup(type, overSec){
   timerInterval=setInterval(tickTimer,1000); tickTimer();
   try{ beep(); }catch(e){}
   toast('🚨 เกินเวลา '+META[type].name,'เกินมา '+fmtMin(overSec),'err');
+  try{ beep(3); }catch(e){}
   showSystemNotification('🚨 เกินเวลา '+META[type].name, 'เกินกำหนดแล้ว คลิกเพื่อกลับมาดู');
   startTitleFlash('🚨 เกินเวลา '+META[type].name);
 }
 function ensureNotifyPermission(){ if(!('Notification' in window))return; if(Notification.permission==='default')Notification.requestPermission(); }
 function showSystemNotification(t,b){ try{ if(!('Notification' in window))return; if(Notification.permission!=='granted')return;
-  var n=new Notification(t,{body:b,requireInteraction:true,tag:'ett-overtime'});
+  var n=new Notification(t,{body:b,requireInteraction:true,tag:'ett-overtime',vibrate:[200,100,200]});
   n.onclick=function(){window.focus();try{this.close();}catch(e){}};
 }catch(e){}}
 var titleFlashTimer=null, originalTitle='EAST TIME TRACKER';
 function startTitleFlash(msg){
   if(titleFlashTimer)return; var on=true;
-  titleFlashTimer=setInterval(function(){ document.title = on?msg:originalTitle; on=!on; },800);
+  titleFlashTimer=setInterval(function(){ document.title = on?msg:originalTitle; on=!on; },500);
 }
 function stopTitleFlash(){ if(titleFlashTimer){clearInterval(titleFlashTimer);titleFlashTimer=null;} document.title=originalTitle; }
 document.addEventListener('visibilitychange',function(){ if(!document.hidden){ stopTitleFlash(); checkSessionExpiry(); } });
 window.addEventListener('focus', stopTitleFlash);
-function beep(){ var A=window.AudioContext||window.webkitAudioContext; if(!A)return;
-  var ctx=new A(); var o=ctx.createOscillator(); var g=ctx.createGain();
-  o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=880; g.gain.value=.15;
-  o.start(); o.stop(ctx.currentTime+.25);
+function beep(times){ var A=window.AudioContext||window.webkitAudioContext; if(!A)return;
+  times=times||1;
+  try{
+    var ctx=new A();
+    for(var i=0;i<times;i++){
+      var o=ctx.createOscillator(); var g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.type='sine'; o.frequency.value=880; g.gain.value=.15;
+      var t=ctx.currentTime+i*0.35;
+      o.start(t); o.stop(t+0.25);
+    }
+  }catch(e){}
+  // สั่นบนมือถือ (ถ้ารองรับ)
+  try{ if(navigator.vibrate) navigator.vibrate(times>1?[200,100,200,100,200]:200); }catch(e){}
 }
 
 // ===== LOGOUT =====
