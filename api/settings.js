@@ -3,7 +3,7 @@
 // เรียก: POST /api/settings  body: { action, token, ... }
 // (Admin level เท่านั้น)
 // ============================================================
-import { supabase, getUserByToken, isAdminLevel, json } from './_lib/supabase.js';
+import { supabase, getUserByToken, isAdminLevel, isSuperAdmin, json } from './_lib/supabase.js';
 
 // helper อ่าน/เขียน setting
 async function getSetting(key, def = '') {
@@ -62,6 +62,13 @@ export default async function handler(req, res) {
     // ---------- ตั้งค่าพื้นหลัง ----------
     if (body.action === 'setBackground') {
       await setSetting('default_bg_url', body.url || '');
+      return json(res, { success: true });
+    }
+
+    // ---------- ตั้งธีมเริ่มต้นของระบบ (เฉพาะผู้ดูแลสูงสุด) ----------
+    if (body.action === 'setDefaultTheme') {
+      if (!isSuperAdmin(user)) return json(res, { success: false, message: 'เฉพาะผู้ดูแลสูงสุด' });
+      await setSetting('default_theme', body.theme || 'deep');
       return json(res, { success: true });
     }
 
