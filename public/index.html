@@ -3154,10 +3154,13 @@ function pollForcedStop(){
   google.script.run
     .withSuccessHandler(function(res){
       if(res && res.forcedStops && res.forcedStops.length){
+        if(typeof buildMeta==='function' && (!META || Object.keys(META).length===0)) buildMeta();  // กัน META ว่าง
         res.forcedStops.forEach(function(fs){
           // หา type (en) จากชื่อไทย (displayType) เพื่อปิด UI ให้ถูกการ์ด
           var enType = null;
           for(var t in META){ if(META[t] && META[t].name === fs.activityType){ enType = t; break; } }
+          // fallback: หาจาก TYPE_MAP ผ่าน running ที่ค้าง (เผื่อ META ไม่ match)
+          if(!enType){ for(var rt in running){ if(running.hasOwnProperty(rt)){ var dn=(META[rt]&&META[rt].name)||''; if(dn===fs.activityType){ enType=rt; break; } } } }
           if(enType && running[enType]){
             finishStopUI(enType, fs.minutes);   // ปิด popup + การ์ด + ลบ running local
             showForcedStopInfo(fs);             // เด้ง popup บอกใครหยุด เวลาเท่าไหร่
@@ -3169,7 +3172,7 @@ function pollForcedStop(){
     .withFailureHandler(function(){})
     .pollStatus(currentUser.username, currentUser.token, localActs);
 }
-setInterval(pollForcedStop, 30000);  // ทุก 30 วินาที
+setInterval(pollForcedStop, 15000);  // ทุก 15 วินาที (เด้ง popup ถูกหยุดเร็วขึ้น)
 
 // ===== RESTORE SESSION =====
 function tryRestoreSession(){
@@ -4044,8 +4047,15 @@ function restoreRunning(){
       .withSuccessHandler(function(res){
         if(res && res.expired){ handleExpired(); return; }
         if(res && res.kicked){ handleKicked(); return; }
-        if(res && res.success && res.activities && res.activities.length>0){
-          mergeServerRunning(res.activities);
+        if(res && res.success){
+          if(res.activities && res.activities.length>0){
+            mergeServerRunning(res.activities);
+          }
+          // เช็ค: local มีกิจกรรมที่ server ไม่มี = ถูก admin หยุดไปแล้ว → เช็ค force stop ทันที (ไม่รอ 30 วิ)
+          var serverTypes = (res.activities||[]).map(function(a){ return a.type; });
+          var hasLocalOnly = false;
+          for(var t in running){ if(running.hasOwnProperty(t) && serverTypes.indexOf(t)<0){ hasLocalOnly=true; break; } }
+          if(hasLocalOnly){ if(typeof buildMeta==='function') buildMeta(); pollForcedStop(); }
         }
       })
       .withFailureHandler(function(){})
