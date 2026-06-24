@@ -4107,6 +4107,11 @@ function mergeServerRunning(serverActs){
       };
       added=true;
     }
+    // เพิ่มเติม: ถ้า server บอก crossDay แต่จริงๆ เพิ่งเริ่ม < 12 ชม. → ถือว่ายังวันนี้ (กัน mark ผิด)
+    if(a.crossDay && (Date.now()-a.startMs) < 12*3600000 && !running[a.type]){
+      running[a.type]={startMs:a.startMs, startStr:a.startStr, quotaStartRemainSec:null, notifiedLimit:false, lastOverStep:0, recovered:true};
+      added=true;
+    }
   });
   if(added){
     saveRunning();
