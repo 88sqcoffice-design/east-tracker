@@ -244,8 +244,9 @@ export default async function handler(req, res) {
         const { data: allRun } = await supabase.from('running').select('*');
         const nowMs = Date.now();
         for (const r of (allRun || [])) {
-          const dispType = r.activity_type;                       // running.activity_type เก็บเป็นชื่อไทยอยู่แล้ว
-          const limit = ACT_LIMIT[dispType];                       // 120 / 20 / 0(assist)
+          const enType = r.activity_type;                          // running เก็บเป็น en เช่น 'toilet'
+          const dispType = TYPE_MAP[enType] || enType;             // → ไทย 'เข้าห้องน้ำ'
+          const limit = ACT_LIMIT[dispType];                       // 120 / 20 / 0(assist) — key เป็นไทย
           if (!limit || limit <= 0) continue;                      // ช่วยงานบริษัท = ไม่จำกัด
           const icon = ACT_ICON[dispType] || '⏱️';
           const elapsed = (nowMs - Number(r.start_ms)) / 60000;    // นาทีที่ทำไป
