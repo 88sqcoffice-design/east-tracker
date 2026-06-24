@@ -2068,6 +2068,12 @@ body.theme-winter #spaceBg::before{background-image:
         </div>
         <button class="btn-s" style="margin-top:10px" onclick="clearAdminDefaultBg()">ลบ default ของระบบ</button>
       </div>
+      <div class="theme-admin-box" id="superDefaultThemeBox" style="display:none;margin-top:14px">
+        <div class="theme-admin-title">⭐ ธีมเริ่มต้นของระบบ (ผู้ดูแลสูงสุด)</div>
+        <p style="font-size:11px;color:var(--text-dim);margin-bottom:10px;line-height:1.5">เลือกธีมด้านบนก่อน แล้วกดปุ่มนี้ — ทุกคนที่ยังไม่ตั้งธีมเองจะเห็นธีมนี้เป็นค่าเริ่มต้น</p>
+        <button class="btn-apply" style="width:100%" onclick="saveSystemDefaultTheme()">⭐ ตั้งธีมที่เลือกอยู่เป็นค่าเริ่มต้นของระบบ</button>
+        <div id="currentDefaultThemeLabel" style="font-size:12px;color:var(--text-dim);margin-top:10px;text-align:center"></div>
+      </div>
     </div>
 
     <div class="theme-actions">
@@ -2159,6 +2165,7 @@ body.theme-winter #spaceBg::before{background-image:
     setTelegramSettings: { url: '/api/settings', build: function (a) { var c = a[2] || {}; return { action: 'setTelegram', token: a[1], enabled: c.enabled, botToken: c.botToken, chatId: c.chatId, overtimeMinutes: c.overtimeMinutes }; } },
     testTelegramSend: { url: '/api/settings', build: function (a) { return { action: 'testTelegram', token: a[1] }; } },
     setDefaultBackground: { url: '/api/settings', build: function (a) { return { action: 'setBackground', token: a[1], url: a[2] }; } },
+    setSystemDefaultTheme: { url: '/api/settings', build: function (a) { return { action: 'setDefaultTheme', token: a[1], theme: a[2] }; } },
     setDefaultTextColors: { url: '/api/settings', build: function (a) { var c = a[2] || {}; return { action: 'setTextColors', token: a[1], main: c.main, sub: c.sub, num: c.num, btn: c.btn }; } },
     setDefaultPopupImages: { url: '/api/settings', build: function (a) { return { action: 'setPopupImages', token: a[1], images: a[2] }; } },
 
@@ -2176,7 +2183,7 @@ body.theme-winter #spaceBg::before{background-image:
   function transformSpecial(special, settings) {
     settings = settings || {};
     if (special === 'getBackground') {
-      return { success: true, url: settings.default_bg_url || '' };
+      return { success: true, url: settings.default_bg_url || '', defaultTheme: settings.default_theme || '' };
     }
     if (special === 'getTextColors') {
       return { success: true, colors: {
@@ -2273,7 +2280,8 @@ var SHARED_QUOTA_DEFAULT = 90;
 // suffixes: deep→masq, nebula→casino, galaxy→avatar, aurora→retro, cosmic→garden
 var THEME_ICON_SUFFIX = {
   'deep':'-masq', 'nebula':'-casino', 'galaxy':'-avatar',
-  'aurora':'-retro', 'cosmic':'-garden'
+  'aurora':'-retro', 'cosmic':'-garden',
+  'arabian':'', 'ocean':'', 'carnival':'', 'hollywood':'', 'winter':''
 };
 var THEME_LABEL = {
   'deep':'Masquerade Ball', 'nebula':'Casino', 'galaxy':'Avatar',
@@ -2362,13 +2370,14 @@ function mapIconToTheme(href, suffix){
 // ลำดับ: รูปส่วนตัว (localStorage) → admin default (Sheet) → built-in theme
 var BUILT_IN_THEMES = ['deep','nebula','galaxy','aurora','cosmic','arabian','ocean','carnival','hollywood','winter'];
 var adminDefaultBg = '';   // URL ที่ admin ตั้งไว้
+var adminDefaultTheme = '';   // ธีมเริ่มต้นที่ superadmin ตั้ง (ทุกคนเห็นถ้ายังไม่เลือกเอง)
 
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
 function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
 
 function getUserBg(){ return lsGet('ett_bg_user') || ''; }              // dataURL หรือ URL
-function getUserTheme(){ return lsGet('ett_theme_user') || 'deep'; }    // built-in theme
+function getUserTheme(){ return lsGet('ett_theme_user') || adminDefaultTheme || 'deep'; }    // user เลือก > ธีมเริ่มต้นระบบ > deep
 
 // ===== สีตัวอักษร 4 ส่วน (admin default + user override) =====
 // main=ชื่อ/หัวข้อ, sub=คำอธิบาย, num=ตัวเลข, btn=บนปุ่ม
@@ -2460,7 +2469,7 @@ function applyBackground(){
 function loadAdminDefaultBg(){
   google.script.run
     .withSuccessHandler(function(res){
-      if(res&&res.success){ adminDefaultBg=res.url||''; applyBackground(); }
+      if(res&&res.success){ adminDefaultBg=res.url||''; adminDefaultTheme=res.defaultTheme||''; applyBackground(); }
     })
     .withFailureHandler(function(){})
     .getDefaultBackground();
@@ -2586,6 +2595,13 @@ function openThemeModal(){
   // admin section
   var isAdmin = currentUser && String(currentUser.username).toLowerCase()==='admin';
   document.getElementById('adminThemeSection').style.display = isAdmin?'block':'none';
+  // ธีมเริ่มต้นระบบ — เฉพาะผู้ดูแลสูงสุด
+  var isSuper = (function(){ if(!currentUser) return false; var u=String(currentUser.username).toLowerCase(); var r=(currentUser.role||'').toLowerCase(); return (u==='admin'||r==='superadmin'); })();
+  var sbox=document.getElementById('superDefaultThemeBox');
+  if(sbox){ sbox.style.display = isSuper?'block':'none';
+    var lbl=document.getElementById('currentDefaultThemeLabel');
+    if(lbl) lbl.textContent = adminDefaultTheme ? ('ธีมเริ่มต้นปัจจุบัน: '+(THEME_LABEL[adminDefaultTheme]||adminDefaultTheme)) : 'ยังไม่ได้ตั้งธีมเริ่มต้น (ใช้ Masquerade Ball)';
+  }
   if(isAdmin){
     document.getElementById('adminBgUrlInput').value = adminDefaultBg || '';
   }
@@ -2595,6 +2611,9 @@ function closeThemeModal(){ document.getElementById('themeModal').className='mod
 function applyBuiltInTheme(name){
   lsDel('ett_bg_user');
   lsSet('ett_theme_user', name);
+  // force เปลี่ยน body class ทันที (regex ลบ theme- เก่าทั้งหมด แล้วใส่ใหม่ — เร็ว+ชัวร์)
+  document.body.className = document.body.className.replace(/\btheme-\S+/g, '').replace(/\s+/g, ' ').trim();
+  document.body.classList.add('theme-'+name);
   applyBackground();
   // refresh active state
   document.querySelectorAll('.theme-thumb').forEach(function(t){
@@ -2680,6 +2699,23 @@ function saveAdminDefaultBg(){
 function clearAdminDefaultBg(){
   document.getElementById('adminBgUrlInput').value='';
   saveAdminDefaultBg();
+}
+function saveSystemDefaultTheme(){
+  if(!currentUser)return;
+  var theme=getUserTheme();  // ธีมที่กำลังใช้อยู่
+  if(BUILT_IN_THEMES.indexOf(theme)<0) theme='deep';
+  google.script.run
+    .withSuccessHandler(function(res){
+      if(res&&res.success){
+        adminDefaultTheme=theme;
+        var lbl=document.getElementById('currentDefaultThemeLabel');
+        if(lbl) lbl.textContent='ธีมเริ่มต้นปัจจุบัน: '+(THEME_LABEL[theme]||theme);
+        toast('⭐ ตั้งธีมเริ่มต้นแล้ว','ทุกคนที่ยังไม่เลือกธีมเองจะเห็น '+(THEME_LABEL[theme]||theme));
+      }else if(res && res.expired){ handleExpired(); } else if(res && res.kicked){ handleKicked(); }
+      else{ toast('❌ บันทึกไม่สำเร็จ',(res&&res.message)||'','err'); }
+    })
+    .withFailureHandler(function(e){ toast('❌ เกิดข้อผิดพลาด',e.message,'err'); })
+    .setSystemDefaultTheme(currentUser.username, currentUser.token, theme);
 }
 
 // init theme บนหน้าจอ (ทันทีตอน load)
