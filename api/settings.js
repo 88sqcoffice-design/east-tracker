@@ -56,7 +56,12 @@ export default async function handler(req, res) {
         body: JSON.stringify({ chat_id: chatId, text: '✅ ทดสอบการแจ้งเตือน EAST TIME TRACKER', parse_mode: 'HTML' }),
       });
       const ok = r.ok;
-      return json(res, { success: ok, message: ok ? 'ส่งสำเร็จ' : 'ส่งไม่สำเร็จ — เช็ค token/chat id' });
+      const enabled = await getSetting('tg_enabled', 'false');
+      let msg;
+      if (!ok) msg = 'ส่งไม่สำเร็จ — เช็ค token/chat id';
+      else if (enabled === 'true') msg = '✅ ส่งสำเร็จ + ระบบแจ้งเตือนเปิดอยู่';
+      else msg = '⚠️ ส่งทดสอบสำเร็จ แต่ระบบแจ้งเตือนยัง "ปิด"! ต้องเปิดสวิตช์ "เปิดใช้งาน" แล้วกดบันทึก';
+      return json(res, { success: ok, enabled: enabled === 'true', message: msg });
     }
 
     // ---------- ตั้งค่าพื้นหลัง ----------
