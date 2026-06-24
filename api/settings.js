@@ -11,7 +11,8 @@ async function getSetting(key, def = '') {
   return data ? data.value : def;
 }
 async function setSetting(key, value) {
-  await supabase.from('settings').upsert({ key, value: String(value) });
+  const { error } = await supabase.from('settings').upsert({ key, value: String(value) }, { onConflict: 'key' });
+  return !error;
 }
 
 export default async function handler(req, res) {
@@ -36,11 +37,11 @@ export default async function handler(req, res) {
     // ---------- ตั้งค่า Telegram ----------
     if (body.action === 'setTelegram') {
       const { enabled, botToken, chatId, overtimeMinutes } = body;
-      await setSetting('tg_enabled', enabled ? 'true' : 'false');
-      if (botToken != null) await setSetting('tg_bot_token', botToken);
-      if (chatId != null) await setSetting('tg_chat_id', chatId);
-      if (overtimeMinutes != null) await setSetting('tg_overtime_minutes', overtimeMinutes);
-      return json(res, { success: true });
+      let ok = await setSetting('tg_enabled', enabled ? 'true' : 'false');
+      if (botToken != null) ok = (await setSetting('tg_bot_token', botToken)) && ok;
+      if (chatId != null) ok = (await setSetting('tg_chat_id', chatId)) && ok;
+      if (overtimeMinutes != null) ok = (await setSetting('tg_overtime_minutes', overtimeMinutes)) && ok;
+      return json(res, { success: ok, message: ok ? '' : 'บันทึกไม่สำเร็จ — ตรวจสอบฐานข้อมูล' });
     }
 
     // ---------- ทดสอบส่ง Telegram ----------
