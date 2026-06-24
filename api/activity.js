@@ -252,6 +252,7 @@ export default async function handler(req, res) {
           }
           // --- (2) เกินเวลา: เตือนซ้ำทุก interval นาที (atomic: over_step เพิ่มขั้น) ---
           if (elapsed > limit) {
+           try {
             const overMin = elapsed - limit;
             const step = Math.floor(overMin / interval) + 1;       // ขั้นที่ควรแจ้ง ณ ตอนนี้
             if (step > (r.over_step || 0)) {
@@ -261,6 +262,7 @@ export default async function handler(req, res) {
                 await sendTelegram(`🚨 <b>เกินเวลาที่กำหนด!</b>\n${icon} กิจกรรม: ${dispType}\n\n👤 ${r.display_name || r.username} (@${r.username})\n\n🕐 เริ่มเมื่อ ${r.start_str || '-'}\n⏱️ ทำมาแล้ว ${Math.round(elapsed)} นาที\n⚠️ เกินกำหนดมาแล้ว ${Math.round(overMin)} นาที (limit ${limit} นาที)`);
               }
             }
+           } catch (eo) { /* over_step column อาจยังไม่มี (ยังไม่รัน SQL) — ครบเวลายังส่งได้ */ }
           }
         }
       } catch (e) { /* แจ้งเตือนล้มเหลว ไม่กระทบ poll หลัก */ }
