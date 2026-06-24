@@ -2,7 +2,7 @@
 // api/staff.js — จัดการพนักงาน (superadmin เท่านั้น)
 // เรียก: POST /api/staff  body: { action, token, ... }
 // ============================================================
-import { supabase, TYPE_MAP, getUserByToken, isSuperAdmin, hashPassword, logAction, json, thaiTimeStr } from './_lib/supabase.js';
+import { supabase, TYPE_MAP, getUserByToken, isSuperAdmin, hashPassword, logAction, json, thaiTimeStr, thaiDateStr } from './_lib/supabase.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, { success: false, message: 'POST only' }, 405);
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
     // ---------- รีเซ็ตเวลา (ลบ logs วันนี้ + ตั้งนาทีใหม่ได้) ----------
     if (body.action === 'resetTime') {
       const { targetUsername, activityTypes, minutesMap } = body;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = thaiDateStr();
       const allActs = ['break', 'smoking', 'toilet', 'eat', 'assist'];
       const selectedActs = (activityTypes && activityTypes.length) ? activityTypes : allActs;
 
