@@ -2,11 +2,11 @@
 // api/activity.js — เริ่ม/หยุดกิจกรรม + โควต้า + ประวัติ
 // เรียก: POST /api/activity  body: { action, token, ... }
 // ============================================================
-import { supabase, QUOTA, TYPE_MAP, getUserByToken, logAction, json, thaiTimeStr } from './_lib/supabase.js';
+import { supabase, QUOTA, TYPE_MAP, getUserByToken, logAction, json, thaiTimeStr, sendTelegram, thaiDateStr, thaiStartDate } from './_lib/supabase.js';
 
 // คำนวณโควต้าจาก logs วันนี้ (SQL SUM — เร็วมาก)
 async function getQuota(username) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = thaiDateStr();
   const { data } = await supabase
     .from('logs')
     .select('display_type, minutes')
@@ -83,10 +83,15 @@ export default async function handler(req, res) {
         username: uname, display_name: dname,
         activity_type: activityType, display_type: displayType,
         start_str: startStr || '', stop_str: nowStr,
-        minutes, log_date: new Date().toISOString().slice(0, 10),
+        minutes, log_date: thaiStartDate(durationSec),  // ลงวันที่เริ่ม (เวลาไทย)
       });
 
       await logAction(uname, user.role, 'หยุดกิจกรรม', `${dname} หยุด "${displayType}" (${minutes} นาที)`);
+      // แจ้ง Telegram ถ้าเกินเวลาที่กำหนด
+      const lim = (displayType.includes('พักเบรค')) ? QUOTA.break : ((displayType.includes('สูบบุหรี่')||displayType.includes('ห้องน้ำ')||displayType.includes('กินข้าว')) ? QUOTA.smoking : 0);
+      if (lim > 0 && minutes > lim) {
+        await sendTelegram(`🚨 <b>เกินเวลา</b>\n<b>${dname}</b> ทำ "${displayType}" ไป ${minutes} นาที (เกิน ${lim} นาที)`);
+      }
 
       const quota = await getQuota(uname);
       return json(res, { success: true, minutes, quota });
@@ -99,7 +104,7 @@ export default async function handler(req, res) {
 
     // ---------- ประวัติวันนี้ ----------
     if (body.action === 'todayLogs') {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = thaiDateStr();
       const { data } = await supabase
         .from('logs').select('*')
         .ilike('username', uname).eq('log_date', today)
@@ -182,7 +187,7 @@ export default async function handler(req, res) {
 
     // ---------- สรุปจำนวนครั้งวันนี้ ----------
     if (body.action === 'summary') {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = thaiDateStr();
       const { data } = await supabase.from('logs').select('display_type')
         .ilike('username', uname).eq('log_date', today);
       const counts = { break: 0, smoking: 0, toilet: 0, assist: 0, eat: 0 };
@@ -200,7 +205,7 @@ export default async function handler(req, res) {
     // ---------- ตรวจสถานะ (polling 30 วิ): กิจกรรมที่ทำอยู่ถูก admin หยุดให้ไหม ----------
     if (body.action === 'pollStatus') {
       const { localActs } = body;  // [{type, startMs}] กิจกรรมที่ frontend ทำอยู่ + เวลาเริ่ม
-      const today = new Date().toISOString().slice(0, 10);
+      const today = thaiDateStr();
       const forcedStops = [];
       if (localActs && localActs.length) {
         const { data: run } = await supabase.from('running').select('activity_type').ilike('username', uname);
@@ -230,7 +235,7 @@ export default async function handler(req, res) {
     if (body.action === 'batch') {
       const { queue } = body;  // [{ type, startStr, durationSec }, ...]
       if (!queue || !queue.length) return json(res, { success: true, saved: 0 });
-      const today = new Date().toISOString().slice(0, 10);
+      const today = thaiDateStr();
       let saved = 0;
       for (const item of queue) {
         const displayType = TYPE_MAP[item.type] || item.type;
@@ -244,7 +249,7 @@ export default async function handler(req, res) {
         await supabase.from('logs').insert({
           username: uname, display_name: dname,
           activity_type: item.type, display_type: displayType,
-          start_str: item.startStr || '', stop_str: nowStrB, minutes, log_date: today,
+          start_str: item.startStr || '', stop_str: nowStrB, minutes, log_date: thaiStartDate(item.durationSec),  // วันเริ่ม
         });
         // ลบ running ถ้ามี
         await supabase.from('running').delete().ilike('username', uname).eq('activity_type', item.type);
