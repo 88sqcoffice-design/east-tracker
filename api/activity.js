@@ -263,8 +263,8 @@ export default async function handler(req, res) {
           if (elapsed > limit) {
            try {
             const overMin = elapsed - limit;
-            const step = Math.floor(overMin / interval) + 1;       // ขั้นที่ควรแจ้ง ณ ตอนนี้
-            if (step > (r.over_step || 0)) {
+            const step = Math.floor(overMin / interval);           // เกิน 1 ช่วง=1, 2 ช่วง=2 (เกิน 0 นาที = ยังไม่แจ้ง)
+            if (step >= 1 && step > (r.over_step || 0)) {
               const { data: ok } = await supabase.from('running')
                 .update({ over_step: step }).eq('id', r.id).lt('over_step', step).select('id');
               if (ok && ok.length > 0) {
