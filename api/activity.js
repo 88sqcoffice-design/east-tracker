@@ -173,15 +173,16 @@ export default async function handler(req, res) {
     // ---------- กิจกรรมค้าง (ของตัวเอง) ----------
     if (body.action === 'running') {
       const { data } = await supabase.from('running').select('*').ilike('username', uname);
-      const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
-      const midnightMs = midnight.getTime();
+      const SEVEN_H = 7 * 60 * 60 * 1000;
+      // เที่ยงคืนไทยวันนี้ (epoch จริง) — เดิมใช้ midnight UTC = 07:00 ไทย ทำให้กิจกรรมเช้าถูกมองว่าข้ามวันผิด
+      const thaiMidnightMs = Math.floor((Date.now() + SEVEN_H) / 86400000) * 86400000 - SEVEN_H;
       const activities = (data || []).map(r => {
         const startMs = parseInt(r.start_ms) || Date.now();
-        const sd = new Date(startMs);
+        const sd = new Date(startMs + SEVEN_H);
         return {
           type: r.activity_type, startMs, startStr: r.start_str || '',
-          crossDay: startMs < midnightMs,
-          startDate: sd.toLocaleDateString('th-TH'),
+          crossDay: startMs < thaiMidnightMs,
+          startDate: sd.toISOString().slice(0, 10),
         };
       });
       return json(res, { success: true, activities });
