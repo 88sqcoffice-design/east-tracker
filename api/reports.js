@@ -2,7 +2,7 @@
 // api/reports.js — รายงานรายวัน/ช่วงวัน + รายละเอียดรายคน + ลบรายการ
 // เรียก: POST /api/reports  body: { action, token, ... }
 // ============================================================
-import { supabase, QUOTA, getUserByToken, isAdminLevel, logAction, json } from './_lib/supabase.js';
+import { supabase, QUOTA, getUserByToken, isAdminLevel, logAction, json, thaiDateStr } from './_lib/supabase.js';
 
 // รวมข้อมูลเป็นรายคน (โควต้า + จำนวนครั้ง)
 function aggregateByUser(rows) {
@@ -140,7 +140,7 @@ export default async function handler(req, res) {
         `ลบรายการ "${row.display_type}" ของ @${row.username} (${row.minutes} นาที)`);
 
       // คืนโควต้า — คำนวณใหม่
-      const today = new Date().toISOString().slice(0, 10);
+      const today = thaiDateStr();
       let quota = null;
       if (row.log_date === today) {
         const { data: logs } = await supabase.from('logs').select('display_type, minutes')
