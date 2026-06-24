@@ -2433,7 +2433,7 @@ function setBgEl(url, themeName){
   el.classList.remove('has-custom');
   // ตั้ง body class สำหรับ theme (icons, fonts, colors)
   var bodyEl=document.body;
-  bodyEl.classList.remove('theme-deep','theme-nebula','theme-galaxy','theme-aurora','theme-cosmic');
+  bodyEl.classList.remove('theme-deep','theme-nebula','theme-galaxy','theme-aurora','theme-cosmic','theme-arabian','theme-ocean','theme-carnival','theme-hollywood','theme-winter');
   var tname = themeName || getUserTheme();
   if(BUILT_IN_THEMES.indexOf(tname)<0) tname='deep';
   bodyEl.classList.add('theme-'+tname);
