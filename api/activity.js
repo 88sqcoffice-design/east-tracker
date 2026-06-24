@@ -44,9 +44,8 @@ export default async function handler(req, res) {
     // ---------- เริ่มกิจกรรม ----------
     if (body.action === 'start') {
       const { activityType, startStr } = body;
-      // ลบ running เก่าก่อน แล้ว insert ใหม่ (ใช้ delete+insert แทน upsert
-      // เพราะ unique index เป็น functional lower(username) — onConflict ระบุไม่ได้)
-      await supabase.from('running').delete().ilike('username', uname).eq('activity_type', activityType);
+      // ทำได้ทีละกิจกรรม — ลบ running เก่า "ทุก type" ก่อน insert ใหม่ (กันค้างหลายอัน)
+      await supabase.from('running').delete().ilike('username', uname);
       const { error: insErr } = await supabase.from('running').insert({
         username: uname, display_name: dname, activity_type: activityType,
         start_ms: Date.now(), start_str: startStr,
@@ -213,16 +212,17 @@ export default async function handler(req, res) {
       if (localActs && localActs.length) {
         const { data: run } = await supabase.from('running').select('activity_type').ilike('username', uname);
         const runningTypes = (run || []).map(r => r.activity_type);
+        // หา force_stop ล่าสุดของ user — ไม่ filter log_date (log_date=วันเริ่ม อาจต่างจากวันนี้) ใช้ created_at แทน
         const { data: fsl } = await supabase.from('force_stop_log').select('*')
-          .ilike('target_user', uname).eq('log_date', today)
-          .order('created_at', { ascending: false });
+          .ilike('target_user', uname)
+          .order('created_at', { ascending: false }).limit(20);
         const fslList = fsl || [];
         for (const act of localActs) {
           if (runningTypes.includes(act.type)) continue;  // ยังทำอยู่ ไม่ถูกหยุด
           const displayType = TYPE_MAP[act.type] || act.type;
           // หา force_stop ที่เกิดหลังเวลาเริ่มปัจจุบัน (รอบนี้) — กันเจอของเก่ารอบก่อน
           const m = fslList.find(f => f.display_type === displayType &&
-            new Date(f.created_at).getTime() > (act.startMs || 0));
+            new Date(f.created_at).getTime() > (act.startMs || 0) - 60000);
           if (m) {
             forcedStops.push({
               activityType: displayType, stopperUser: m.stopper_user,
