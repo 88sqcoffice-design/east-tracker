@@ -3,14 +3,14 @@
 // เรียก: POST /api/bell  body: { action, token, limit }
 // (Admin level เท่านั้น)
 // ============================================================
-import { supabase, getUserByToken, isAdminLevel, json } from './_lib/supabase.js';
+import { supabase, getUserByToken, isAdminOrMonitor, json } from './_lib/supabase.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, { success: false, message: 'POST only' }, 405);
   const body = req.body || {};
   const user = await getUserByToken(body.token);
   if (!user) return json(res, { success: false, expired: true });
-  if (!isAdminLevel(user)) return json(res, { success: false, message: 'เฉพาะผู้ดูแลระบบ' });
+  if (!isAdminOrMonitor(user)) return json(res, { success: false, message: 'เฉพาะผู้ดูแลระบบ' });
 
   try {
     if (body.action === 'getActionLog') {
