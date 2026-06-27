@@ -85,13 +85,16 @@ export default async function handler(req, res) {
         minutes, log_date: thaiStartDate(durationSec),  // ลงวันที่เริ่ม (เวลาไทย)
       });
 
-      await logAction(uname, user.role, 'หยุดกิจกรรม', `${dname} หยุด "${displayType}" (${minutes} นาที)`);
-      // แจ้ง Telegram เมื่อหยุดเอง + เกินเวลาที่กำหนด
+      // คำนวณเกินเวลา (ใช้กับทั้ง log + Telegram)
       const lim = ACT_LIMIT[displayType] || 0;
-      if (lim > 0 && minutes > lim) {
+      const isOverStop = lim > 0 && minutes > lim;
+      const overStopMin = isOverStop ? Math.round((minutes - lim) * 100) / 100 : 0;
+      // กระดิ่ง admin แจ้งเฉพาะ "เกินเวลา" → ใช้ type 'หยุดกิจกรรม (เกินเวลา)' เมื่อเกิน
+      await logAction(uname, user.role, isOverStop ? 'หยุดกิจกรรม (เกินเวลา)' : 'หยุดกิจกรรม',
+        `${dname} หยุด "${displayType}" (${minutes} นาที)${isOverStop ? ' ⚠️ เกิน ' + overStopMin + ' นาที' : ''}`);
+      if (isOverStop) {
         const sIcon = ACT_ICON[displayType] || '⏱️';
-        const sOver = Math.round((minutes - lim) * 100) / 100;
-        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที)\n⚠️ เกินมา ${sOver} นาที`);
+        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที) ⚠️ เกินมา ${overStopMin} นาที`);
       }
 
       const quota = await getQuota(uname);
@@ -280,6 +283,7 @@ export default async function handler(req, res) {
       let bellItems = null;
       if (body.needBell) {
         const { data: alog } = await supabase.from('activity_log').select('*')
+          .in('type', ['หยุดกิจกรรม (เกินเวลา)', 'กดหยุดให้'])
           .order('created_at', { ascending: false }).limit(50);
         bellItems = (alog || []).map(r => {
           const dt = new Date(r.created_at);
