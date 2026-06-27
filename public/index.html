@@ -4854,9 +4854,11 @@ function applyLiveCollapsed(){
 }
 
 var __liveLoading=false;
-function loadLiveActivities(){
+function loadLiveActivities(force){
   if(!currentUser)return;
   if(__liveLoading)return;
+  // ซ่อนแท็บ + auto-refresh → ข้าม (ประหยัด) — แต่กดปุ่มเอง (force) หรือกลับมาดู ยังโหลดได้
+  if(document.hidden && !force)return;
   var uname=String(currentUser.username).toLowerCase();
   var role=(currentUser.role||'').toLowerCase();
   if(uname!=='admin' && role!=='superadmin' && role!=='admin' && role!=='monitor')return;
@@ -5173,8 +5175,15 @@ function deleteOldData(btn){
 function startLiveMonitor(){
   if(liveTimer)clearInterval(liveTimer);
   applyLiveCollapsed();
-  loadLiveActivities();
+  loadLiveActivities(true);  // force โหลดครั้งแรก
   liveTimer=setInterval(loadLiveActivities, LIVE_REFRESH_MS);
+  // กลับมาดูแท็บ + อยู่หน้า Live → refresh ทันที (ชดเชยช่วงที่ข้าม)
+  if(!window.__liveVisBound){
+    window.__liveVisBound = true;
+    document.addEventListener('visibilitychange', function(){
+      if(!document.hidden && liveTimer) loadLiveActivities(true);
+    });
+  }
 }
 function stopLiveMonitor(){
   if(liveTimer){clearInterval(liveTimer);liveTimer=null;}
