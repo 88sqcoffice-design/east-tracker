@@ -3153,7 +3153,7 @@ function pollForcedStop(){
   if(document.hidden && localActs.length===0 && !isAdminOrMon) return;
   // ไม่มีกิจกรรม + ไม่ใช่ admin/monitor → ไม่ต้อง poll
   if(localActs.length === 0 && !isAdminOrMon) return;
-  var needBell = isAdminOrMon ? true : false;  // bell เฉพาะ admin/monitor (รวมมากับ poll)
+  var needBell = isAdminOnly ? true : false;  // bell เฉพาะ admin/superadmin (ไม่รวม monitor)
   google.script.run
     .withSuccessHandler(function(res){
       // online: poll สำเร็จ = ออนไลน์ (รวม ping เข้ามา — ไม่ต้อง ping แยก)
@@ -4259,8 +4259,7 @@ function enterApp(){
     showScreen('dashboardScreen');
     document.getElementById('empMenuLive').style.display='';  // แสดงเมนู Live (เฉพาะ monitor)
     moveLiveMonitorToEmp();  // ย้าย Live Monitor UI มาหน้าพนักงาน
-    moveBellToEmp();  // ย้ายกระดิ่งมาหน้า monitor
-    startBellPolling();  // เปิดกระดิ่งแจ้งเตือนให้ monitor
+    // กระดิ่ง: monitor ไม่มีกระดิ่งแล้ว (เฉพาะ admin/superadmin)
     if(typeof empSwitch==='function') empSwitch('activity');
     reloadData();
     startQuotaTick();
