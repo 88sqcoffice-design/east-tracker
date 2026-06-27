@@ -91,7 +91,7 @@ export default async function handler(req, res) {
       if (lim > 0 && minutes > lim) {
         const sIcon = ACT_ICON[displayType] || '⏱️';
         const sOver = Math.round((minutes - lim) * 100) / 100;
-        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที)\n⚠️ เกินมา ${sOver} นาที`);
+        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที) ⚠️ เกินมา ${sOver} นาที`);
       }
 
       const quota = await getQuota(uname);
@@ -276,7 +276,21 @@ export default async function handler(req, res) {
         }
       } catch (e) { /* แจ้งเตือนล้มเหลว ไม่กระทบ poll หลัก */ }
 
-      return json(res, { success: true, forcedStops });
+      // รวม bell: ถ้า needBell (admin/monitor) → ดึง activity_log ล่าสุด (ประหยัด: ไม่ต้องเรียก bell แยก)
+      let bellItems = null;
+      if (body.needBell) {
+        const { data: alog } = await supabase.from('activity_log').select('*')
+          .order('created_at', { ascending: false }).limit(50);
+        bellItems = (alog || []).map(r => {
+          const dt = new Date(r.created_at);
+          return {
+            date: dt.toLocaleDateString('th-TH'),
+            time: dt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            actor: r.actor, role: r.role, type: r.type, detail: r.detail, ms: dt.getTime(),
+          };
+        });
+      }
+      return json(res, { success: true, forcedStops, bellItems });
     }
 
     // ---------- บันทึกแบบ batch (offline sync) ----------
