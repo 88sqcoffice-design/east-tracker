@@ -259,7 +259,10 @@ export default async function handler(req, res) {
       // วน running ทั้งหมดในระบบ (ใครก็ได้ที่ poll จะ trigger เช็คให้ทุกคน) — กันส่งซ้ำด้วย flag atomic
       try {
         // throttle: scan แค่ทุก ~13 วิ (ไม่ว่ากี่คน poll พร้อมกัน) — ลดภาระ backend มหาศาล
-        const lastScan = Number(await getSetting('tg_last_scan', '0'));
+        // ดึง config 2 ค่า (tg_last_scan + tg_overtime_minutes) ใน query เดียว — ลด query/CPU
+        const { data: cfgR } = await supabase.from('settings').select('key, value').in('key', ['tg_last_scan', 'tg_overtime_minutes']);
+        const cfgMap = {}; (cfgR || []).forEach(c => { cfgMap[c.key] = c.value; });
+        const lastScan = Number(cfgMap['tg_last_scan'] || '0');
         const nowScan = Date.now();
         if (nowScan - lastScan < 13000) {
           return json(res, { success: true, forcedStops, bellItems });  // เพิ่ง scan ไป → ข้าม
@@ -271,7 +274,7 @@ export default async function handler(req, res) {
           return json(res, { success: true, forcedStops, bellItems });
         }
         await supabase.from('settings').upsert({ key: 'tg_last_scan', value: String(nowScan) }, { onConflict: 'key' });
-        const interval = parseInt(await getSetting('tg_overtime_minutes', '3')) || 3;  // ช่วงเตือนซ้ำหลังเกิน (นาที)
+        const interval = parseInt(cfgMap['tg_overtime_minutes'] || '3') || 3;  // จาก cfg เดียวกัน (ไม่ query ซ้ำ)
         const nowMs = Date.now();
         for (const r of (allRun || [])) {
           const enType = r.activity_type;                          // running เก็บเป็น en เช่น 'toilet'
