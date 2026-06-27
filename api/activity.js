@@ -234,6 +234,27 @@ export default async function handler(req, res) {
           }
         }
       }
+      // === Bell (incremental): ดึงเฉพาะรายการใหม่กว่าที่เห็นล่าสุด — เดิมดึง 50 ทุกครั้ง ===
+      // กรองเฉพาะ alert: หยุดเกินเวลา + กดหยุดให้ (admin/superadmin)
+      let bellItems = null;
+      if (body.needBell) {
+        const bLastMs = Number(body.bellLastMs) || 0;
+        const bLimit = bLastMs > 0 ? 30 : 1;  // ครั้งแรก = baseline 1 รายการ, หลังจากนั้นดึง 30 แล้วกรองเฉพาะใหม่
+        const { data: alog } = await supabase.from('activity_log').select('*')
+          .in('type', ['หยุดกิจกรรม (เกินเวลา)', 'กดหยุดให้'])
+          .order('created_at', { ascending: false }).limit(bLimit);
+        let mapped = (alog || []).map(r => {
+          const dt = new Date(r.created_at);
+          return {
+            date: dt.toLocaleDateString('th-TH'),
+            time: dt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            actor: r.actor, role: r.role, type: r.type, detail: r.detail, ms: dt.getTime(),
+          };
+        });
+        if (bLastMs > 0) mapped = mapped.filter(it => it.ms > bLastMs);  // เฉพาะใหม่กว่า last (incremental)
+        bellItems = mapped;
+      }
+
       // ===== เช็คเวลาครบ/เกิน แล้วส่ง Telegram (real-time ขณะกิจกรรมยังทำอยู่) =====
       // วน running ทั้งหมดในระบบ (ใครก็ได้ที่ poll จะ trigger เช็คให้ทุกคน) — กันส่งซ้ำด้วย flag atomic
       try {
@@ -241,11 +262,16 @@ export default async function handler(req, res) {
         const lastScan = Number(await getSetting('tg_last_scan', '0'));
         const nowScan = Date.now();
         if (nowScan - lastScan < 13000) {
-          return json(res, { success: true, forcedStops });  // เพิ่ง scan ไป → ข้าม (คนอื่นทำแล้ว)
+          return json(res, { success: true, forcedStops, bellItems });  // เพิ่ง scan ไป → ข้าม
+        }
+        // ดึง running ทั้งหมดก่อน — ถ้าไม่มีใครทำกิจกรรม ยืด throttle เป็น ~60 วิ (ประหยัด query ตอนกลางคืน/ว่าง)
+        const { data: allRun } = await supabase.from('running').select('*');
+        if (!allRun || allRun.length === 0) {
+          await supabase.from('settings').upsert({ key: 'tg_last_scan', value: String(nowScan + 45000) }, { onConflict: 'key' });
+          return json(res, { success: true, forcedStops, bellItems });
         }
         await supabase.from('settings').upsert({ key: 'tg_last_scan', value: String(nowScan) }, { onConflict: 'key' });
         const interval = parseInt(await getSetting('tg_overtime_minutes', '3')) || 3;  // ช่วงเตือนซ้ำหลังเกิน (นาที)
-        const { data: allRun } = await supabase.from('running').select('*');
         const nowMs = Date.now();
         for (const r of (allRun || [])) {
           const enType = r.activity_type;                          // running เก็บเป็น en เช่น 'toilet'
@@ -279,21 +305,6 @@ export default async function handler(req, res) {
         }
       } catch (e) { /* แจ้งเตือนล้มเหลว ไม่กระทบ poll หลัก */ }
 
-      // รวม bell: ถ้า needBell (admin/monitor) → ดึง activity_log ล่าสุด (ประหยัด: ไม่ต้องเรียก bell แยก)
-      let bellItems = null;
-      if (body.needBell) {
-        const { data: alog } = await supabase.from('activity_log').select('*')
-          .in('type', ['หยุดกิจกรรม (เกินเวลา)', 'กดหยุดให้'])
-          .order('created_at', { ascending: false }).limit(50);
-        bellItems = (alog || []).map(r => {
-          const dt = new Date(r.created_at);
-          return {
-            date: dt.toLocaleDateString('th-TH'),
-            time: dt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            actor: r.actor, role: r.role, type: r.type, detail: r.detail, ms: dt.getTime(),
-          };
-        });
-      }
       return json(res, { success: true, forcedStops, bellItems });
     }
 
