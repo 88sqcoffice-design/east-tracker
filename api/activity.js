@@ -91,7 +91,7 @@ export default async function handler(req, res) {
       if (lim > 0 && minutes > lim) {
         const sIcon = ACT_ICON[displayType] || '⏱️';
         const sOver = Math.round((minutes - lim) * 100) / 100;
-        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที) ⚠️ เกินมา ${sOver} นาที`);
+        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที)\n⚠️ เกินมา ${sOver} นาที`);
       }
 
       const quota = await getQuota(uname);
