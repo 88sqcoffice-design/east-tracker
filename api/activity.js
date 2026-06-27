@@ -94,7 +94,7 @@ export default async function handler(req, res) {
         `${dname} หยุด "${displayType}" (${minutes} นาที)${isOverStop ? ' ⚠️ เกิน ' + overStopMin + ' นาที' : ''}`);
       if (isOverStop) {
         const sIcon = ACT_ICON[displayType] || '⏱️';
-        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที) ⚠️ เกินมา ${overStopMin} นาที`);
+        await sendTelegram(`⛔️ <b>หยุดกิจกรรม (เกินเวลา)</b>\n${sIcon} กิจกรรม: ${displayType}\n\n👤 ${dname} (@${uname})\n\n🕐 ${startStr || '-'} → ${nowStr}\n⏱️ ใช้เวลา ${minutes} นาที (กำหนด ${lim} นาที)\n⚠️ เกินมา ${overStopMin} นาที`);
       }
 
       const quota = await getQuota(uname);
