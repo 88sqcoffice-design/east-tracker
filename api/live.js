@@ -74,7 +74,7 @@ export default async function handler(req, res) {
         `กดหยุด "${displayType}" ของ ${targetDisplayName || targetUsername} (${minutes} นาที)`);
       const fsIcon = ACT_ICON[displayType] || '⏱️';
       const fsRole = ROLE_LABEL[user.role] || user.role || 'ผู้ดูแล';
-      await sendTelegram(`🛑 <b>มีการกดหยุดให้ (โดยผู้ดูแล)</b>\n${fsIcon} กิจกรรม: ${displayType}\n\n👮 ผู้กดหยุด: @${user.username} (${fsRole})\n\n👤 ผู้ถูกหยุด: ${targetDisplayName || targetUsername} (@${targetUsername})\n\n🕐 ${startStr || '-'} → ${stopStr}\n⏱️ ใช้เวลาไป ${minutes} นาที`);
+      await sendTelegram(`🛑 <b>มีการกดหยุดให้ (โดยผู้ดูแล)</b>\n${fsIcon} กิจกรรม: ${displayType}\n\n👮 ผู้กดหยุด: ${user.display_name || user.username} (@${user.username}) (${fsRole})\n\n👤 ผู้ถูกหยุด: ${targetDisplayName || targetUsername} (@${targetUsername})\n\n🕐 ${startStr || '-'} → ${stopStr}\n⏱️ ใช้เวลาไป ${minutes} นาที`);
       return json(res, { success: true, minutes });
     }
 
