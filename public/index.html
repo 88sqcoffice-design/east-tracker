@@ -2132,7 +2132,7 @@ body.theme-winter #spaceBg::before{background-image:
     getHistoryLogs: { url: '/api/activity', build: function (a) { return { action: 'historyLogs', token: a[1], page: a[2], dateFrom: a[3], dateTo: a[4] }; } },
     getSummary: { url: '/api/activity', build: function (a) { return { action: 'summary', token: a[1] }; } },
     getRunningActivities: { url: '/api/activity', build: function (a) { return { action: 'running', token: a[1] }; } },
-    pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localActs: a[2] , needBell: a[4] }; } },
+    pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localActs: a[2], needBell: a[3], bellLastMs: a[4] }; } },
 
     // ===== REPORTS =====
     getAdminDailyReport: { url: '/api/reports', build: function (a) { return { action: 'daily', token: a[1], date: a[2] }; } },
@@ -3178,7 +3178,7 @@ function pollForcedStop(){
       if(res && res.bellItems){ processBellItems(res.bellItems); }
     })
     .withFailureHandler(function(){ isOnline=false; updateNetPill(); })
-    .pollStatus(currentUser.username, currentUser.token, localActs, needBell);
+    .pollStatus(currentUser.username, currentUser.token, localActs, needBell, __bellLastMs);
 }
 setInterval(pollForcedStop, 15000);  // poll รวม (force stop + online + bell) ทุก 15 วิ
 
@@ -5024,20 +5024,26 @@ function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,
 // เช็ครายการใหม่เพื่อขึ้น badge (poll เบาๆ ทุก 30 วิ)
 // ประมวลผล bell items ที่ได้มากับ poll (ไม่เรียก API แยก — ประหยัด request)
 function processBellItems(items){
-  if(!items || !items.length) return;
-  var newestMs = items[0].ms || 0;
-  if(__bellLastMs===0){ __bellLastMs=newestMs; return; }  // ครั้งแรก = baseline ไม่ขึ้น badge
-  if(newestMs > __bellLastMs){
-    var cnt=0;
-    for(var i=0;i<items.length;i++){ if((items[i].ms||0) > __bellLastMs) cnt++; }
-    var badge=document.getElementById('bellBadge');
-    var panel=document.getElementById('bellPanel');
-    if(panel && panel.classList.contains('show')){
-      __bellLastMs=newestMs;
-    }else if(badge && cnt>0){
-      badge.textContent=cnt>99?'99+':cnt;
-      badge.style.display='';
-    }
+  // backend ส่งมาแบบ incremental — เฉพาะรายการที่ใหม่กว่า __bellLastMs แล้ว
+  if(__bellLastMs===0){
+    // ครั้งแรก = baseline (backend ส่ง 1 รายการล่าสุด) → จำไว้ ไม่ขึ้น badge
+    if(items && items.length) __bellLastMs = items[0].ms || 0;
+    return;
+  }
+  if(!items || !items.length) return;  // ไม่มีรายการใหม่
+  var newestMs = items[0].ms || __bellLastMs;
+  var badge=document.getElementById('bellBadge');
+  var panel=document.getElementById('bellPanel');
+  if(panel && panel.classList.contains('show')){
+    __bellLastMs = newestMs;       // panel เปิดอยู่ = เห็นแล้ว ไม่ขึ้น badge
+    if(typeof loadActionLog==='function') loadActionLog();  // รีเฟรชรายการในแผง
+  }else if(badge){
+    // สะสมจำนวนใหม่เข้า badge เดิม (incremental)
+    var cur = parseInt(badge.textContent) || 0;
+    var total = cur + items.length;
+    badge.textContent = total>99?'99+':total;
+    badge.style.display='';
+    __bellLastMs = newestMs;
   }
 }
 
