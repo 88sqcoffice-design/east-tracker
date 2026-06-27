@@ -3149,6 +3149,7 @@ function pollForcedStop(){
   var localActs = [];
   for(var t in running){ if(running.hasOwnProperty(t)) localActs.push({type:t, startMs:running[t].startMs}); }
   var isAdminOrMon = window.__isMonitor || (currentUser.role && ['admin','superadmin','monitor'].indexOf(String(currentUser.role).toLowerCase())>=0) || String(currentUser.username).toLowerCase()==='admin';
+  var isAdminOnly = (currentUser.role && ['admin','superadmin'].indexOf(String(currentUser.role).toLowerCase())>=0) || String(currentUser.username).toLowerCase()==='admin';
   // ระดับ A: ซ่อนแท็บ + ไม่มีกิจกรรม + ไม่ใช่ admin/monitor → หยุด poll (ประหยัด request)
   if(document.hidden && localActs.length===0 && !isAdminOrMon) return;
   // ไม่มีกิจกรรม + ไม่ใช่ admin/monitor → ไม่ต้อง poll
@@ -3180,7 +3181,35 @@ function pollForcedStop(){
     .withFailureHandler(function(){ isOnline=false; updateNetPill(); })
     .pollStatus(currentUser.username, currentUser.token, localActs, needBell, __bellLastMs);
 }
-setInterval(pollForcedStop, 15000);  // poll รวม (force stop + online + bell) ทุก 15 วิ
+// ===== เฟส 2: Adaptive polling — ปรับความถี่ตามการใช้งาน (ประหยัด request ตัวหลัก) =====
+var __pollTimer = null;
+function getPollDelay(){
+  if(!currentUser) return 15000;
+  var hasAct = false;
+  for(var t in running){ if(running.hasOwnProperty(t)){ hasAct=true; break; } }
+  var isAdminOrMon = window.__isMonitor || (currentUser.role && ['admin','superadmin','monitor'].indexOf(String(currentUser.role).toLowerCase())>=0) || String(currentUser.username).toLowerCase()==='admin';
+  // admin/monitor → 15 วิ เสมอ (ต้อง trigger Telegram + เห็น force stop เร็ว)
+  if(isAdminOrMon) return 15000;
+  // มีกิจกรรม: ดู popup อยู่ (visible) → 15 วิ | สลับแท็บ/ซ่อน → 40 วิ (ยังเช็คถูกหยุดได้)
+  if(hasAct) return document.hidden ? 40000 : 15000;
+  // ไม่มีกิจกรรม + ไม่ใช่ admin → poll ช้ามาก (แค่เช็ค online/state)
+  return 60000;
+}
+function schedulePoll(){
+  if(__pollTimer) clearTimeout(__pollTimer);
+  __pollTimer = setTimeout(function(){
+    try{ pollForcedStop(); }catch(e){}
+    schedulePoll();  // วนต่อด้วย delay ที่คำนวณใหม่
+  }, getPollDelay());
+}
+schedulePoll();  // เริ่ม adaptive polling
+// กลับมาดูแท็บ → poll ทันที + รีเซ็ตจังหวะ (popup เด้งเร็วเมื่อกลับมา)
+document.addEventListener('visibilitychange', function(){
+  if(!document.hidden && currentUser){
+    try{ pollForcedStop(); }catch(e){}
+    schedulePoll();
+  }
+});
 
 // ===== RESTORE SESSION =====
 function tryRestoreSession(){
