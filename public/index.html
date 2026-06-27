@@ -2132,7 +2132,7 @@ body.theme-winter #spaceBg::before{background-image:
     getHistoryLogs: { url: '/api/activity', build: function (a) { return { action: 'historyLogs', token: a[1], page: a[2], dateFrom: a[3], dateTo: a[4] }; } },
     getSummary: { url: '/api/activity', build: function (a) { return { action: 'summary', token: a[1] }; } },
     getRunningActivities: { url: '/api/activity', build: function (a) { return { action: 'running', token: a[1] }; } },
-    pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localActs: a[2] }; } },
+    pollStatus: { url: '/api/activity', build: function (a) { return { action: 'pollStatus', token: a[1], localActs: a[2] , needBell: a[4] }; } },
 
     // ===== REPORTS =====
     getAdminDailyReport: { url: '/api/reports', build: function (a) { return { action: 'daily', token: a[1], date: a[2] }; } },
@@ -3141,18 +3141,24 @@ window.addEventListener('offline', function(){
   isOnline=false; updateNetPill();
   toast('🔴 เน็ตหลุด','กิจกรรมจะถูกเก็บไว้ส่งภายหลัง','warn');
 });
-setInterval(pingServer, 10000);
+// pingServer interval ถูกรวมเข้า poll แล้ว (online check ใน poll success) — ประหยัด request
 
 // ===== POLLING: ตรวจว่ากิจกรรมที่ทำอยู่ถูก admin หยุดให้ไหม (ทุก 30 วิ) =====
 function pollForcedStop(){
-  if(!isOnline || !currentUser) return;
+  if(!currentUser) return;
   var localActs = [];
   for(var t in running){ if(running.hasOwnProperty(t)) localActs.push({type:t, startMs:running[t].startMs}); }
-  // เรียก pollStatus ถ้า: มีกิจกรรมทำอยู่ OR เป็น admin/monitor (เพื่อ trigger แจ้งเตือน Telegram ให้ทุกคน)
   var isAdminOrMon = window.__isMonitor || (currentUser.role && ['admin','superadmin','monitor'].indexOf(String(currentUser.role).toLowerCase())>=0) || String(currentUser.username).toLowerCase()==='admin';
-  if(localActs.length === 0 && !isAdminOrMon) return;  // พนักงานทั่วไปที่ไม่มีกิจกรรม → ไม่ต้องเรียก
+  // ระดับ A: ซ่อนแท็บ + ไม่มีกิจกรรม + ไม่ใช่ admin/monitor → หยุด poll (ประหยัด request)
+  if(document.hidden && localActs.length===0 && !isAdminOrMon) return;
+  // ไม่มีกิจกรรม + ไม่ใช่ admin/monitor → ไม่ต้อง poll
+  if(localActs.length === 0 && !isAdminOrMon) return;
+  var needBell = isAdminOrMon ? true : false;  // bell เฉพาะ admin/monitor (รวมมากับ poll)
   google.script.run
     .withSuccessHandler(function(res){
+      // online: poll สำเร็จ = ออนไลน์ (รวม ping เข้ามา — ไม่ต้อง ping แยก)
+      var was=!isOnline; isOnline=true; updateNetPill();
+      if(was){ toast('🟢 เชื่อมต่อกลับมาแล้ว',''); flushQueue(); }
       if(res && res.forcedStops && res.forcedStops.length){
         if(typeof buildMeta==='function' && (!META || Object.keys(META).length===0)) buildMeta();  // กัน META ว่าง
         res.forcedStops.forEach(function(fs){
@@ -3168,11 +3174,13 @@ function pollForcedStop(){
         });
         loadLogs(); loadSummary();
       }
+      // bell (รวมมากับ poll — ไม่ต้องเรียก checkBellBadge แยก)
+      if(res && res.bellItems){ processBellItems(res.bellItems); }
     })
-    .withFailureHandler(function(){})
-    .pollStatus(currentUser.username, currentUser.token, localActs);
+    .withFailureHandler(function(){ isOnline=false; updateNetPill(); })
+    .pollStatus(currentUser.username, currentUser.token, localActs, needBell);
 }
-setInterval(pollForcedStop, 15000);  // ทุก 15 วินาที (เด้ง popup ถูกหยุดเร็วขึ้น)
+setInterval(pollForcedStop, 15000);  // poll รวม (force stop + online + bell) ทุก 15 วิ
 
 // ===== RESTORE SESSION =====
 function tryRestoreSession(){
@@ -5015,37 +5023,27 @@ function renderActionLog(items){
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 // เช็ครายการใหม่เพื่อขึ้น badge (poll เบาๆ ทุก 30 วิ)
-function checkBellBadge(){
-  if(!currentUser) return;
-  google.script.run
-    .withSuccessHandler(function(res){
-      if(res && res.success && res.items && res.items.length){
-        var newestMs = res.items[0].ms || 0;
-        if(__bellLastMs===0){ __bellLastMs=newestMs; return; }  // ครั้งแรก = baseline ไม่ขึ้น badge
-        if(newestMs > __bellLastMs){
-          // มีรายการใหม่ → นับจำนวนที่ใหม่กว่า
-          var cnt=0;
-          for(var i=0;i<res.items.length;i++){ if((res.items[i].ms||0) > __bellLastMs) cnt++; }
-          var badge=document.getElementById('bellBadge');
-          var panel=document.getElementById('bellPanel');
-          // ถ้า panel เปิดอยู่ = เห็นแล้ว ไม่ต้องขึ้น badge + อัปเดต baseline
-          if(panel && panel.classList.contains('show')){
-            __bellLastMs=newestMs;
-          }else if(badge && cnt>0){
-            badge.textContent=cnt>99?'99+':cnt;
-            badge.style.display='';
-          }
-        }
-      }
-    })
-    .withFailureHandler(function(){})
-    .getActionLog(currentUser.username, currentUser.token, 50);
+// ประมวลผล bell items ที่ได้มากับ poll (ไม่เรียก API แยก — ประหยัด request)
+function processBellItems(items){
+  if(!items || !items.length) return;
+  var newestMs = items[0].ms || 0;
+  if(__bellLastMs===0){ __bellLastMs=newestMs; return; }  // ครั้งแรก = baseline ไม่ขึ้น badge
+  if(newestMs > __bellLastMs){
+    var cnt=0;
+    for(var i=0;i<items.length;i++){ if((items[i].ms||0) > __bellLastMs) cnt++; }
+    var badge=document.getElementById('bellBadge');
+    var panel=document.getElementById('bellPanel');
+    if(panel && panel.classList.contains('show')){
+      __bellLastMs=newestMs;
+    }else if(badge && cnt>0){
+      badge.textContent=cnt>99?'99+':cnt;
+      badge.style.display='';
+    }
+  }
 }
 
 function startBellPolling(){
-  if(__bellTimer) clearInterval(__bellTimer);
-  checkBellBadge();  // เช็คครั้งแรก (baseline)
-  __bellTimer=setInterval(checkBellBadge, 30000);  // ทุก 30 วิ
+  // bell รวมเข้า poll แล้ว — ไม่ต้องมี interval แยก (poll จะดึง bellItems มาเอง)
 }
 function stopBellPolling(){ if(__bellTimer){ clearInterval(__bellTimer); __bellTimer=null; } }
 
