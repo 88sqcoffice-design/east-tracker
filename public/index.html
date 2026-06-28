@@ -3487,9 +3487,14 @@ function stopActivity(type,btn){
   __savingStop[type]=true;
   lockRefresh(true);
   setStopBtnLoading(type, true);
+  // guard: ถ้า request ค้างเกิน 15 วิ → ปลดล็อก ให้กดใหม่ได้ (กัน __savingStop ค้างถาวร)
+  var __stopGuard=setTimeout(function(){
+    if(__savingStop[type]){ __savingStop[type]=false; lockRefresh(false); setStopBtnLoading(type,false); toast('⚠️ ช้าผิดปกติ','กรุณากดหยุดอีกครั้ง','err'); }
+  },15000);
 
   google.script.run
     .withSuccessHandler(function(res){
+      clearTimeout(__stopGuard);
       __savingStop[type]=false; lockRefresh(false);
       if(res && res.success){
         finishStopUI(type, minutes);
@@ -3513,6 +3518,7 @@ function stopActivity(type,btn){
     })
     .withFailureHandler(function(){
       // เน็ตหลุด → เก็บ queue + ถือว่าเสร็จ (queue จะ retry sync)
+      clearTimeout(__stopGuard);
       __savingStop[type]=false; lockRefresh(false);
       isOnline=false;
       enqueueStop({ type:type, startStr:startStr, durationSec:durationSec });
