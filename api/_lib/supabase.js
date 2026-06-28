@@ -68,10 +68,18 @@ export async function sendTelegram(text) {
     const botToken = await getSetting('tg_bot_token', '');
     const chatId = await getSetting('tg_chat_id', '');
     if (!botToken || !chatId) return;
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
-    });
+    // timeout 5 วิ — กัน Telegram API ช้าทำให้ stop/start ค้าง (เคยทำ function เกิน maxDuration)
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 5000);
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(tid);
+    }
   } catch (e) {}
 }
 
