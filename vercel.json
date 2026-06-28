@@ -4,10 +4,13 @@
   "functions": {
     "api/**/*.js": {
       "memory": 256,
-      "maxDuration": 10
+      "maxDuration": 30
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
   ]
 }
